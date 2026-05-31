@@ -115,6 +115,17 @@ class JobService:
         except (KeyError, ValueError):
             return None
 
+    def _source_href_for_slide(self, slide, source_hrefs: list[str]) -> str | None:
+        """Pick product photo per slide: primary for hero/description, gallery rotation for white BG."""
+        if not source_hrefs:
+            return None
+        if slide.role in ("hero", "description"):
+            return source_hrefs[0]
+        if slide.role == "white_background":
+            gallery_idx = max(0, slide.index - 6)
+            return source_hrefs[gallery_idx % len(source_hrefs)]
+        return source_hrefs[0]
+
     def _render_slide_hrefs(
         self,
         slide,
@@ -122,7 +133,7 @@ class JobService:
         *,
         embed: bool,
     ) -> tuple[str | None, str | None]:
-        source_href = source_hrefs[(slide.index - 1) % len(source_hrefs)] if source_hrefs else None
+        source_href = self._source_href_for_slide(slide, source_hrefs)
         background_href = self._asset_image_href(slide.background_asset_id, embed=embed)
         if slide.role == "white_background":
             if source_href:

@@ -106,8 +106,12 @@ def build_image_model_user_prompt(
             "professional catalog photography, product centered, no props, no text."
         )
 
+    ref_hint = (
+        "The attached reference photo is the exact product — match its shape, color, "
+        "and category; do not substitute a different product type."
+    )
     return (
-        f"{base}{role_hint} "
+        f"{base}{role_hint} {ref_hint} "
         f"Creative direction: {visual_prompt}. "
         f"Brief: {request.brief or 'marketplace product card'}. "
         f"Product name (do not render as text): {product_title}."

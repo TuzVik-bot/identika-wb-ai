@@ -204,6 +204,35 @@ def test_white_background_slides_use_product_photo_not_ai_background(tmp_path) -
     assert "<image" in svg
 
 
+def test_description_slides_use_primary_photo_not_gallery_rotation(tmp_path) -> None:
+    png = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108020000009077"
+        "530000000a49444154789c6260000000020001e221bc330000000049454e44ae426082"
+    )
+    storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
+    service = JobService(storage)
+    job = storage.create_job(
+        CreateJobRequest(product=ProductContext(title="Ночник")).model_dump(mode="json")
+    )
+    primary_id = storage.add_asset(job.id, "primary.png", png, "image/png")
+    wrong_id = storage.add_asset(job.id, "wrong.png", png, "image/png")
+    product = ProductContext(
+        title="Ночник",
+        images=[
+            ProductImage(asset_id=primary_id, role="source"),
+            ProductImage(asset_id=wrong_id, role="source"),
+        ],
+    )
+    result = asyncio.run(MockProvider().generate(CreateJobRequest(product=product)))
+    result.product = product
+    rendered = service._render_assets(job.id, result)
+    for slide in rendered.slides[1:5]:
+        slide_path, _ = storage.get_asset(slide.asset_id)
+        svg = slide_path.read_text(encoding="utf-8")
+        assert f"/v1/assets/{primary_id}" in svg
+        assert f"/v1/assets/{wrong_id}" not in svg
+
+
 def test_description_slides_prefer_composite_over_ai_background(tmp_path) -> None:
     png = bytes.fromhex(
         "89504e470d0a1a0a0000000d49484452000000010000000108020000009077"

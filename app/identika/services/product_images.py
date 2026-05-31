@@ -11,6 +11,7 @@ from identika.storage import Storage
 logger = logging.getLogger("identika.product_images")
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
+MIN_PRODUCT_IMAGE_BYTES = 64
 ALLOWED_CONTENT_TYPES = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -60,7 +61,7 @@ def ensure_product_image_urls(product: ProductContext, max_pics: int = 5) -> Pro
     if not nm_id or nm_id <= 0:
         return product
     images = list(product.images)
-    for index in range(1, max_pics + 1):
+    for index in range(1, max(1, max_pics) + 1):
         images.append(
             ProductImage(
                 url=wb_image_url_candidates(nm_id, index)[0],
@@ -70,6 +71,21 @@ def ensure_product_image_urls(product: ProductContext, max_pics: int = 5) -> Pro
         )
     product.images = images
     return product
+
+
+def _source_image_sort_key(image: ProductImage) -> tuple[int, int]:
+    if image.url and "/images/big/" in image.url:
+        try:
+            return (0, int(image.url.rsplit("/", 1)[-1].split(".", 1)[0]))
+        except ValueError:
+            pass
+    return (1, 0)
+
+
+def _is_valid_product_image(data: bytes) -> bool:
+    if not data or len(data) < MIN_PRODUCT_IMAGE_BYTES or len(data) > MAX_IMAGE_BYTES:
+        return False
+    return _detect_image_type(data) is not None
 
 
 def _detect_image_type(data: bytes) -> tuple[str, str] | None:
@@ -116,7 +132,7 @@ async def _download_image_bytes(client: httpx.AsyncClient, url: str) -> tuple[by
                 continue
             response.raise_for_status()
             data = response.content
-            if not data or len(data) > MAX_IMAGE_BYTES:
+            if not _is_valid_product_image(data):
                 continue
             resolved = _resolve_content_type(response.headers.get("content-type", ""), data)
             if not resolved:
@@ -183,6 +199,7 @@ async def download_product_images(
                 image.role = "source"
     downloaded_images = [img for img in images if img.asset_id and img.role == "source"]
     if downloaded_images:
+        downloaded_images.sort(key=_source_image_sort_key)
         product.images = downloaded_images
     elif existing_sources:
         product.images = existing_sources

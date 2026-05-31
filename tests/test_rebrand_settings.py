@@ -10,6 +10,7 @@ from identika.config import EffectiveSettings, settings
 from identika.models import CreateJobRequest, ProductContext
 from identika.services.jobs import JobService
 from identika.services.product_images import (
+    _is_valid_product_image,
     download_product_images,
     ensure_product_image_urls,
 )
@@ -235,6 +236,16 @@ def test_job_page_has_generation_meta_and_rerender(client: TestClient) -> None:
     assert "Информация о генерации" in page.text
     assert "Пересобрать слайды" in page.text
     assert "Статус генерации" in page.text or "mock" in page.text
+
+
+def test_is_valid_product_image_rejects_tiny_or_non_image_payload() -> None:
+    assert not _is_valid_product_image(b"")
+    assert not _is_valid_product_image(b"not-an-image")
+    png = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108020000009077"
+        "530000000a49444154789c6260000000020001e221bc330000000049454e44ae426082"
+    )
+    assert _is_valid_product_image(png)
 
 
 def test_wb_cdn_url_candidates_from_nm_id() -> None:
