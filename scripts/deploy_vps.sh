@@ -61,27 +61,11 @@ echo "→ pip install + restart identika.service"
 run_ssh "cd $REMOTE_APP && .venv/bin/pip install -q . && echo '$SSHPASS' | sudo -S systemctl restart identika && sleep 3"
 
 echo "→ nginx: unified auth + no-cache for /identika/ dynamic routes"
-run_ssh "echo '$SSHPASS' | sudo -S bash -s" <<'NGINX'
-set -euo pipefail
-CONF=""
-for candidate in /etc/nginx/sites-enabled/eurasia-transline.online /etc/nginx/conf.d/eurasia-transline.online.conf /etc/nginx/nginx.conf; do
-  if [[ -f "$candidate" ]]; then CONF="$candidate"; break; fi
-done
-if [[ -z "$CONF" ]]; then
-  CONF="$(grep -rl 'location /identika/' /etc/nginx 2>/dev/null | head -1 || true)"
-fi
-if [[ -n "$CONF" ]]; then
-  sed -i '/location \/identika\//,/}/{ /auth_basic "Identika";/d; /auth_basic_user_file \/etc\/nginx\/identika.htpasswd;/d; }' "$CONF" || true
-  if ! grep -q 'proxy_no_cache 1;' "$CONF"; then
-    sed -i '/location \/identika\//a\    proxy_no_cache 1;\n    proxy_cache_bypass 1;' "$CONF" || true
-  fi
-  rm -f /etc/nginx/identika.htpasswd || true
-  nginx -t
-  systemctl reload nginx
-else
-  echo "WARN: nginx config with /identika/ not found — apply proxy_no_cache manually" >&2
-fi
-NGINX
+run_ssh "echo '$SSHPASS' | sudo -S sed -i '/auth_basic \"Identika\";/d' /etc/nginx/sites-available/wb-tool 2>/dev/null || true"
+run_ssh "echo '$SSHPASS' | sudo -S sed -i '/auth_basic_user_file \\/etc\\/nginx\\/identika.htpasswd;/d' /etc/nginx/sites-available/wb-tool 2>/dev/null || true"
+run_ssh "grep -q 'proxy_no_cache 1;' /etc/nginx/sites-available/wb-tool 2>/dev/null || echo '$SSHPASS' | sudo -S sed -i '/location \\/identika\\/ {/a\\        proxy_no_cache 1;\\n        proxy_cache_bypass 1;' /etc/nginx/sites-available/wb-tool"
+run_ssh "echo '$SSHPASS' | sudo -S rm -f /etc/nginx/identika.htpasswd 2>/dev/null || true"
+run_ssh "echo '$SSHPASS' | sudo -S nginx -t && echo '$SSHPASS' | sudo -S systemctl reload nginx"
 
 echo "→ ensure IDENTIKA_UI_PASSWORD unset in app .env"
 run_ssh "grep -q '^IDENTIKA_UI_PASSWORD=' $REMOTE_APP/.env 2>/dev/null && sed -i '/^IDENTIKA_UI_PASSWORD=/d' $REMOTE_APP/.env || true"
