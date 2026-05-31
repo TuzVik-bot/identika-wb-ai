@@ -9,7 +9,11 @@ from identika.app import create_app
 from identika.config import EffectiveSettings, settings
 from identika.models import CreateJobRequest, ProductContext
 from identika.services.jobs import JobService
-from identika.services.product_images import download_product_images
+from identika.services.product_images import (
+    download_product_images,
+    ensure_product_image_urls,
+)
+from identika.services.wb_cdn import wb_basket_id, wb_image_url_candidates
 from identika.storage import Storage
 
 
@@ -118,6 +122,8 @@ def test_download_product_images_stores_local_assets(tmp_path, monkeypatch) -> N
     )
 
     class FakeResponse:
+        status_code = 200
+
         def __init__(self) -> None:
             self.headers = {"content-type": "image/png"}
 
@@ -145,8 +151,99 @@ def test_download_product_images_stores_local_assets(tmp_path, monkeypatch) -> N
         title="Тест",
         images=[{"url": "https://example.com/product.png", "role": "source"}],
     )
-    updated = asyncio.run(download_product_images("job123", product, storage))
+    updated, warnings = asyncio.run(download_product_images("job123", product, storage))
     assert updated.images[0].asset_id
+    assert not warnings
     path, media_type = storage.get_asset(updated.images[0].asset_id)
     assert media_type == "image/png"
     assert path.read_bytes().startswith(b"\x89PNG")
+
+
+def test_settings_preserves_masked_api_key(client: TestClient, tmp_path) -> None:
+    client.post(
+        "/settings",
+        data={
+            "provider": "openrouter",
+            "openrouter_api_key": "sk-or-initial-key-9999",
+            "openrouter_text_model": "test/text-model",
+            "openrouter_image_model": "test/image-model",
+        },
+    )
+    save = client.post(
+        "/settings",
+        data={
+            "provider": "openrouter",
+            "openrouter_api_key": "••••9999",
+            "openrouter_text_model": "test/text-model",
+            "openrouter_image_model": "test/image-model",
+        },
+    )
+    assert save.status_code == 303
+    storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
+    eff = EffectiveSettings.resolve(storage)
+    assert eff.openrouter_api_key == "sk-or-initial-key-9999"
+
+
+def test_wb_cdn_url_candidates_from_nm_id() -> None:
+    nm_id = 123_456_789
+    vol = nm_id // 100_000
+    urls = wb_image_url_candidates(nm_id, 1)
+    assert wb_basket_id(vol) in urls[0]
+    assert f"/vol{vol}/part{nm_id // 1000}/{nm_id}/images/big/1." in urls[0]
+    assert any(url.endswith(".webp") for url in urls)
+    assert any("wbbasket.ru" in url for url in urls)
+
+
+def test_ensure_product_image_urls_uses_nm_id_when_empty() -> None:
+    product = ProductContext(title="Тест", nm_id=2002, images=[])
+    updated = ensure_product_image_urls(product)
+    assert len(updated.images) == 5
+    assert all(img.url and "2002" in img.url for img in updated.images)
+
+
+def test_rerender_job_rebuilds_svg_with_embedded_images(tmp_path, monkeypatch) -> None:
+    png = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108020000009077"
+        "530000000a49444154789c6260000000020001e221bc330000000049454e44ae426082"
+    )
+
+    class FakeResponse:
+        status_code = 200
+
+        def __init__(self) -> None:
+            self.headers = {"content-type": "image/png"}
+
+        def raise_for_status(self) -> None:
+            return None
+
+        @property
+        def content(self) -> bytes:
+            return png
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def get(self, url: str):
+            return FakeResponse()
+
+    monkeypatch.setattr("identika.services.product_images.httpx.AsyncClient", lambda *a, **k: FakeClient())
+
+    storage = Storage(db_path=tmp_path / "db.sqlite", assets_dir=tmp_path / "assets")
+    service = JobService(storage)
+    job = asyncio.run(
+        service.create_job(
+            CreateJobRequest(product=ProductContext(title="Тест", nm_id=2002, images=[]))
+        )
+    )
+    slide_path, _ = storage.get_asset(job.result.slides[0].asset_id)
+    assert "ТОВАР" not in slide_path.read_text(encoding="utf-8")
+
+    rerendered = asyncio.run(service.rerender_job(job.id))
+    export_path, _ = storage.get_asset(rerendered.result.export_asset_id)
+    with __import__("zipfile").ZipFile(export_path) as zf:
+        exported = zf.read("slides/slide_01.svg").decode("utf-8")
+    assert "data:image/png;base64," in exported

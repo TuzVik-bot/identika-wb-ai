@@ -251,6 +251,31 @@ async def job_page(request: Request, job_id: str) -> HTMLResponse:
     )
 
 
+@router.post("/jobs/{job_id}/re-render")
+async def rerender_job_page(request: Request, job_id: str) -> RedirectResponse:
+    try:
+        await service(request).rerender_job(job_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="job not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(url=url(f"/jobs/{job_id}?rerender=ok"), status_code=303)
+
+
+@router.post("/v1/generation/jobs/{job_id}/re-render")
+async def rerender_job_api(request: Request, job_id: str) -> JSONResponse:
+    try:
+        job = await service(request).rerender_job(job_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="job not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return JSONResponse(
+        content={"ok": True, "job_id": job.id, "status": job.status},
+        headers=NO_CACHE_HEADERS,
+    )
+
+
 @router.post("/demo")
 async def demo(request: Request, background_tasks: BackgroundTasks):
     payload = CreateJobRequest(

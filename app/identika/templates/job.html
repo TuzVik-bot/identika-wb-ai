@@ -20,6 +20,9 @@
       </form>
       {% endif %}
       <a class="button button--dark" href="{{ base_path }}/v1/generation/jobs/{{ job.id }}/export">Export ZIP</a>
+      <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/re-render">
+        <button type="submit" class="button button--ghost" title="Пересобрать SVG с встроенными фото">Пересобрать слайды</button>
+      </form>
       <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/upload-to-wb">
         <button type="submit" class="button button--ghost" {% if not can_upload %}disabled title="Сначала approve"{% endif %}>Загрузить на WB</button>
       </form>
@@ -33,6 +36,8 @@
   <section class="surface-card notice notice--success">Пакет успешно отправлен в WB Tool.</section>
   {% elif upload_status == 'error' %}
   <section class="surface-card notice notice--error">Не удалось загрузить пакет в WB Tool. Проверьте, что сервис доступен.</section>
+  {% elif request.query_params.get('rerender') == 'ok' %}
+  <section class="surface-card notice notice--success">Слайды пересобраны с актуальными фото.</section>
   {% elif job.status in ['queued', 'running'] and not job.result %}
   <section class="surface-card notice" id="job-running-notice">
     Генерация выполняется… статус: <strong>{{ job.status }}</strong>

@@ -4,7 +4,7 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from identika.config import EffectiveSettings
+from identika.config import EffectiveSettings, settings
 from identika.models import (
     CreateJobRequest,
     GenerationResult,
@@ -63,9 +63,14 @@ class JobService:
         eff = EffectiveSettings.resolve(self.storage)
         provider_name = eff.effective_provider
         try:
-            request.product = await download_product_images(job_id, request.product, self.storage)
+            request.product, image_warnings = await download_product_images(
+                job_id, request.product, self.storage
+            )
             provider = get_provider(self.storage)
             result = await provider.generate(request, eff)
+            result.product = request.product
+            if image_warnings:
+                result.warnings.extend(image_warnings)
             if eff.enable_ai_images and eff.effective_provider == "openrouter":
                 from identika.providers.image_gen import generate_slide_images
 
@@ -86,78 +91,120 @@ class JobService:
             self.storage.save_error(job_id, str(exc))
             raise
 
-    def _source_image_uris(self, result: GenerationResult) -> list[str]:
-        uris: list[str] = []
+    def _source_image_hrefs(self, result: GenerationResult, *, embed: bool) -> list[str]:
+        hrefs: list[str] = []
         for image in result.product.images:
             if image.role != "source" or not image.asset_id:
                 continue
-            try:
-                path, media_type = self.storage.get_asset(image.asset_id)
-                uris.append(image_to_data_uri(path, media_type))
-            except (KeyError, ValueError):
-                continue
-        return uris
+            href = self._asset_image_href(image.asset_id, embed=embed)
+            if href:
+                hrefs.append(href)
+        return hrefs
 
-    def _background_image_uri(self, slide_asset_id: str | None) -> str | None:
-        if not slide_asset_id:
+    def _asset_image_href(self, asset_id: str | None, *, embed: bool) -> str | None:
+        if not asset_id:
             return None
         try:
-            path, media_type = self.storage.get_asset(slide_asset_id)
-            if media_type.startswith("image/") and not media_type.endswith("svg+xml"):
+            path, media_type = self.storage.get_asset(asset_id)
+            if not media_type.startswith("image/") or media_type.endswith("svg+xml"):
+                return None
+            if embed:
                 return image_to_data_uri(path, media_type)
+            base = settings.public_base_path
+            return f"{base}/v1/assets/{asset_id}"
         except (KeyError, ValueError):
             return None
-        return None
+
+    def _render_slide_hrefs(
+        self,
+        slide,
+        source_hrefs: list[str],
+        *,
+        embed: bool,
+    ) -> tuple[str | None, str | None]:
+        source_href = source_hrefs[(slide.index - 1) % len(source_hrefs)] if source_hrefs else None
+        background_href = self._asset_image_href(slide.background_asset_id, embed=embed)
+        if slide.role == "white_background" and source_href:
+            background_href = None
+        return source_href, background_href
 
     def _render_assets(self, job_id: str, result: GenerationResult) -> GenerationResult:
-        source_uris = self._source_image_uris(result)
+        source_hrefs_web = self._source_image_hrefs(result, embed=False)
+        source_hrefs_export = self._source_image_hrefs(result, embed=True)
         asset_blobs: dict[str, bytes] = {}
+        export_blobs: dict[str, bytes] = {}
         for slide in result.slides:
-            source_uri = source_uris[(slide.index - 1) % len(source_uris)] if source_uris else None
-            background_uri = self._background_image_uri(slide.background_asset_id)
-            if slide.role == "white_background" and source_uri:
-                background_uri = None
+            source_href, background_href = self._render_slide_hrefs(
+                slide, source_hrefs_web, embed=False
+            )
             data = render_slide_svg(
                 slide,
-                source_image_data_uri=source_uri,
-                background_image_data_uri=background_uri,
+                source_image_href=source_href,
+                background_image_href=background_href,
             )
             asset_id = self.storage.add_asset(job_id, f"slide_{slide.index:02d}.svg", data, "image/svg+xml")
             slide.asset_id = asset_id
             asset_blobs[asset_id] = data
+            export_source, export_background = self._render_slide_hrefs(
+                slide, source_hrefs_export, embed=True
+            )
+            export_blobs[asset_id] = render_slide_svg(
+                slide,
+                source_image_href=export_source,
+                background_image_href=export_background,
+            )
         if result.slides:
+            source_href, background_href = self._render_slide_hrefs(
+                result.slides[0], source_hrefs_web, embed=False
+            )
             cover_data = render_slide_svg(
                 result.slides[0],
-                source_image_data_uri=source_uris[0] if source_uris else None,
-                background_image_data_uri=self._background_image_uri(
-                    result.slides[0].background_asset_id
-                ),
+                source_image_href=source_href,
+                background_image_href=background_href,
             )
             result.rich.cover_asset_id = self.storage.add_asset(
                 job_id, "rich_cover.svg", cover_data, "image/svg+xml"
             )
             asset_blobs[result.rich.cover_asset_id] = cover_data
+            export_source, export_background = self._render_slide_hrefs(
+                result.slides[0], source_hrefs_export, embed=True
+            )
+            export_blobs[result.rich.cover_asset_id] = render_slide_svg(
+                result.slides[0],
+                source_image_href=export_source,
+                background_image_href=export_background,
+            )
         for block in result.rich.blocks:
             source = result.slides[min(block.index - 1, len(result.slides) - 1)]
-            source_uri = source_uris[(source.index - 1) % len(source_uris)] if source_uris else None
+            source_href, background_href = self._render_slide_hrefs(source, source_hrefs_web, embed=False)
             data = render_slide_svg(
                 source,
-                source_image_data_uri=source_uri,
-                background_image_data_uri=self._background_image_uri(source.background_asset_id),
+                source_image_href=source_href,
+                background_image_href=background_href,
             )
             block.asset_id = self.storage.add_asset(
                 job_id, f"rich_block_{block.index:02d}.svg", data, "image/svg+xml"
             )
             asset_blobs[block.asset_id] = data
+            export_source, export_background = self._render_slide_hrefs(
+                source, source_hrefs_export, embed=True
+            )
+            export_blobs[block.asset_id] = render_slide_svg(
+                source,
+                source_image_href=export_source,
+                background_image_href=export_background,
+            )
         pdf = render_pdf_preview(result)
         result.rich.pdf_asset_id = self.storage.add_asset(job_id, "rich_preview.pdf", pdf, "application/pdf")
         asset_blobs[result.rich.pdf_asset_id] = pdf
+        export_blobs[result.rich.pdf_asset_id] = pdf
         rich_html = render_rich_html_preview(result)
         result.rich.html_asset_id = self.storage.add_asset(
             job_id, "rich_preview.html", rich_html, "text/html; charset=utf-8"
         )
         asset_blobs[result.rich.html_asset_id] = rich_html
-        export = build_export_zip(result, asset_blobs)
+        export_blobs[result.rich.html_asset_id] = rich_html
+        export = build_export_zip(result, export_blobs)
         result.export_asset_id = self.storage.add_asset(job_id, "export.zip", export, "application/zip")
         return result
 
@@ -227,3 +274,23 @@ class JobService:
 
     def approve(self, job_id: str) -> JobRecord:
         return self.storage.approve(job_id)
+
+    async def rerender_job(self, job_id: str) -> JobRecord:
+        """Re-download missing product photos and re-render slide SVGs (fixes broken embeds)."""
+        job = self.storage.get_job(job_id)
+        if not job.result:
+            raise ValueError("job has no result")
+        product = job.result.product
+        if not any(img.role == "source" and img.asset_id for img in product.images):
+            product, image_warnings = await download_product_images(job_id, product, self.storage)
+            job.result.product = product
+            if image_warnings:
+                kept = [
+                    w
+                    for w in job.result.warnings
+                    if "фото" not in w.lower() and "cdn" not in w.lower()
+                ]
+                job.result.warnings = kept + image_warnings
+        job.result = self._render_assets(job_id, job.result)
+        self.storage.update_result(job_id, job.result)
+        return self.storage.get_job(job_id)
