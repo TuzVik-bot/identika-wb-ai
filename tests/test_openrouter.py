@@ -10,8 +10,21 @@ import pytest
 from identika.config import settings
 from identika.models import CreateJobRequest, ProductContext
 from identika.providers.image_gen import generate_slide_images
-from identika.providers.openrouter import OpenRouterProvider
+from identika.providers.openrouter import OpenRouterProvider, get_provider
+from identika.providers.mock import MockProvider
 from identika.storage import Storage
+
+
+def test_openrouter_without_api_key_falls_back_to_mock() -> None:
+    settings.identika_provider = "openrouter"
+    settings.openrouter_api_key = ""
+    assert settings.effective_provider == "mock"
+    assert isinstance(get_provider(), MockProvider)
+    result = asyncio.run(
+        OpenRouterProvider().generate(CreateJobRequest(product=ProductContext(title="Тест")))
+    )
+    assert result.provider == "mock"
+    assert any("OPENROUTER_API_KEY is empty" in warning for warning in result.warnings)
 
 
 def _png_data_uri() -> str:

@@ -35,8 +35,12 @@ class OpenRouterProvider(AiProvider):
     name = "openrouter"
 
     async def generate(self, request: CreateJobRequest) -> GenerationResult:
-        if not settings.openrouter_api_key:
-            raise RuntimeError("OPENROUTER_API_KEY is required for openrouter provider")
+        if not settings.openrouter_api_key.strip():
+            result = await MockProvider().generate(request)
+            result.warnings.append(
+                "IDENTIKA_PROVIDER=openrouter but OPENROUTER_API_KEY is empty; using mock generation."
+            )
+            return result
 
         result = await MockProvider().generate(request)
         result.provider = self.name
@@ -148,6 +152,6 @@ class OpenRouterProvider(AiProvider):
 
 
 def get_provider() -> AiProvider:
-    if settings.provider == "openrouter":
+    if settings.effective_provider == "openrouter":
         return OpenRouterProvider()
     return MockProvider()

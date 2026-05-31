@@ -88,9 +88,14 @@ async def health() -> dict:
     return {
         "ok": True,
         "version": __version__,
-        "provider": settings.provider,
-        "image_model": settings.openrouter_image_model if settings.provider == "openrouter" else "mock",
-        "text_model": settings.openrouter_text_model if settings.provider == "openrouter" else "mock",
+        "provider": settings.effective_provider,
+        "configured_provider": settings.provider,
+        "image_model": settings.openrouter_image_model
+        if settings.effective_provider == "openrouter"
+        else "mock",
+        "text_model": settings.openrouter_text_model
+        if settings.effective_provider == "openrouter"
+        else "mock",
         "ai_images": settings.enable_ai_images,
     }
 

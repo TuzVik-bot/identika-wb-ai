@@ -30,10 +30,17 @@ class Settings(BaseSettings):
         return self.identika_provider.strip().lower() or "mock"
 
     @property
+    def effective_provider(self) -> str:
+        """Provider used at runtime (openrouter without key falls back to mock)."""
+        if self.provider == "openrouter" and not self.openrouter_api_key.strip():
+            return "mock"
+        return self.provider
+
+    @property
     def enable_ai_images(self) -> bool:
         if self.identika_enable_ai_images is not None:
             return self.identika_enable_ai_images
-        return self.provider == "openrouter"
+        return self.effective_provider == "openrouter"
 
     @property
     def public_base_path(self) -> str:

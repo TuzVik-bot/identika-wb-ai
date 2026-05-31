@@ -41,7 +41,11 @@ class JobService:
     ) -> JobRecord:
         request = prepare_job_request(request)
         job = self.storage.create_job(request.model_dump(mode="json"))
-        if background_tasks is not None and settings.provider == "openrouter" and settings.enable_ai_images:
+        if (
+            background_tasks is not None
+            and settings.effective_provider == "openrouter"
+            and settings.enable_ai_images
+        ):
             background_tasks.add_task(self._run_job_task, job.id, request)
             return self.storage.get_job(job.id)
         await self._run_job(job.id, request)
@@ -55,11 +59,11 @@ class JobService:
     async def _run_job(self, job_id: str, request: CreateJobRequest) -> None:
         started = time.perf_counter()
         self.storage.set_running(job_id)
-        provider_name = settings.provider
+        provider_name = settings.effective_provider
         try:
             provider = get_provider()
             result = await provider.generate(request)
-            if settings.enable_ai_images and settings.provider == "openrouter":
+            if settings.enable_ai_images and settings.effective_provider == "openrouter":
                 from identika.providers.image_gen import generate_slide_images
 
                 result = await generate_slide_images(job_id, request, result, self.storage)

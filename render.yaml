@@ -1,0 +1,26 @@
+# Render Blueprint: Docker web service with persistent disk for SQLite + assets.
+# Deploy: connect GitHub repo at https://dashboard.render.com → New → Blueprint
+services:
+  - type: web
+    name: identika
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: IDENTIKA_PROVIDER
+        value: mock
+      - key: IDENTIKA_HOST
+        value: 0.0.0.0
+      - key: IDENTIKA_PORT
+        value: "8787"
+      - key: IDENTIKA_DB_PATH
+        value: /data/identika.sqlite
+      - key: IDENTIKA_ASSETS_DIR
+        value: /assets
+      - key: WB_TOOL_BASE_URL
+        value: http://127.0.0.1:8765
+    disk:
+      name: identika-data
+      mountPath: /data
+      sizeGB: 1
