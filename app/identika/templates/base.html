@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{% if page_title %}{{ page_title }} · {% endif %}Aidentika{% endblock %}</title>
-  <link rel="stylesheet" href="{{ base_path }}/static/app.css">
+  <link rel="stylesheet" href="{{ base_path }}/static/app.css?v={{ static_version }}">
 </head>
 <body class="page page-{{ active_page or 'default' }}">
   <header class="topbar">

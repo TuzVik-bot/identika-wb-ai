@@ -19,6 +19,15 @@ def create_app() -> FastAPI:
     base = Path(__file__).parent
     app.state.templates = Jinja2Templates(directory=str(base / "templates"))
     static_dir = str(base / "static")
+    # Cache-busting token derived from the stylesheet mtime so that upstream
+    # proxies/CDNs (which may cache a stale 401/200 for the bare asset URL)
+    # fetch a fresh copy on every deploy.
+    css_path = base / "static" / "app.css"
+    try:
+        static_version = str(int(css_path.stat().st_mtime))
+    except OSError:
+        static_version = "0"
+    app.state.templates.env.globals["static_version"] = static_version
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     if settings.public_base_path:
         app.mount(
