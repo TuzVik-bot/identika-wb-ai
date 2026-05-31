@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ job.product_title }} · Aidentika{% endblock %}
+{% block title %}{{ job.product_title }} · Identika{% endblock %}
 
 {% block content %}
 <section class="job-shell" aria-labelledby="job-title">
@@ -33,7 +33,7 @@
   <section class="surface-card notice notice--success">Пакет успешно отправлен в WB Tool.</section>
   {% elif upload_status == 'error' %}
   <section class="surface-card notice notice--error">Не удалось загрузить пакет в WB Tool. Проверьте, что сервис доступен.</section>
-  {% elif job.status in ['queued', 'running'] %}
+  {% elif job.status in ['queued', 'running'] and not job.result %}
   <section class="surface-card notice" id="job-running-notice">
     Генерация выполняется… статус: <strong>{{ job.status }}</strong>
   </section>
@@ -181,6 +181,17 @@
                 {% endif %}
               </div>
 
+              {% if job.result.info %}
+              <div class="side-card-mini side-card-mini--info">
+                <h4>Статус генерации</h4>
+                <ul class="info-list">
+                  {% for item in job.result.info %}
+                  <li>{{ item }}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+              {% endif %}
+
               <div class="side-card-mini">
                 <h4>Содержимое пакета</h4>
                 <ul class="package-files-list">
@@ -220,14 +231,22 @@
         });
       });
 
-      {% if job.status in ['queued', 'running'] %}
+      {% if job.status in ['queued', 'running'] and not job.result %}
       const poll = () => {
-        fetch('{{ base_path }}/v1/generation/jobs/{{ job.id }}')
+        fetch('{{ base_path }}/v1/generation/jobs/{{ job.id }}?t=' + Date.now(), { cache: 'no-store' })
           .then((response) => response.json())
           .then((data) => {
             if (data.status === 'succeeded' || data.status === 'failed' || data.status === 'approved') {
               window.location.reload();
+              return;
             }
+            return fetch('{{ base_path }}/v1/generation/jobs/{{ job.id }}/result?t=' + Date.now(), { cache: 'no-store' })
+              .then((resultResponse) => {
+                if (resultResponse.ok) {
+                  window.location.reload();
+                }
+              })
+              .catch(() => {});
           })
           .catch(() => {});
       };

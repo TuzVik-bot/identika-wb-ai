@@ -59,6 +59,15 @@ class Storage:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
 
     def create_job(self, request_payload: dict[str, Any]) -> JobRecord:
         job_id = uuid.uuid4().hex
@@ -179,6 +188,24 @@ class Storage:
 
     def add_staging_asset(self, session_id: str, filename: str, data: bytes, media_type: str) -> str:
         return self.add_asset(f"_uploads/{session_id}", filename, data, media_type)
+
+    def get_settings(self) -> dict[str, str]:
+        with self._connect() as conn:
+            rows = conn.execute("SELECT key, value FROM app_settings").fetchall()
+        return {row["key"]: row["value"] for row in rows}
+
+    def set_settings(self, values: dict[str, str]) -> None:
+        now = utcnow_iso()
+        with self._connect() as conn:
+            for key, value in values.items():
+                conn.execute(
+                    """
+                    INSERT INTO app_settings (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+                    """,
+                    (key, value, now),
+                )
 
     def get_asset(self, asset_id: str) -> tuple[Path, str]:
         with self._connect() as conn:

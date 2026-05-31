@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Настройки · Identika{% endblock %}
+
+{% block content %}
+<section class="settings-page" aria-labelledby="settings-title">
+  <header class="surface-card settings-hero">
+    <p class="eyebrow">Конфигурация сервиса</p>
+    <h1 id="settings-title">Настройки</h1>
+    <p class="text-muted">Провайдер, API-ключ OpenRouter и модели для текста и изображений. Значения сохраняются в локальной БД и применяются без перезапуска.</p>
+    {% if saved %}
+    <p class="notice notice--success">Настройки сохранены.</p>
+    {% endif %}
+    {% if test_status == 'ok' %}
+    <p class="notice notice--success">Ключ OpenRouter проверен успешно.</p>
+    {% elif test_status == 'missing_key' %}
+    <p class="notice notice--error">Укажите API-ключ перед проверкой.</p>
+    {% elif test_status == 'error' %}
+    <p class="notice notice--error">Проверка ключа не удалась{% if test_error %}: {{ test_error }}{% endif %}.</p>
+    {% endif %}
+  </header>
+
+  <form class="surface-card settings-form" method="post" action="{{ base_path }}/settings">
+    <div class="settings-section">
+      <h2>Провайдер генерации</h2>
+      <div class="provider-toggle" role="radiogroup" aria-label="Провайдер">
+        <label class="provider-option">
+          <input type="radio" name="provider" value="mock" {% if provider == 'mock' %}checked{% endif %}>
+          <span>
+            <strong>Mock</strong>
+            <small>Работает офлайн, без внешних API</small>
+          </span>
+        </label>
+        <label class="provider-option">
+          <input type="radio" name="provider" value="openrouter" {% if provider == 'openrouter' %}checked{% endif %}>
+          <span>
+            <strong>OpenRouter</strong>
+            <small>Текст и изображения через OpenRouter</small>
+          </span>
+        </label>
+      </div>
+      <p class="settings-status text-muted">
+        Текущий режим:
+        {% if effective_provider == 'openrouter' %}
+        <strong class="text-success">подключён OpenRouter</strong>
+        {% else %}
+        <strong>mock (офлайн)</strong>
+        {% endif %}
+      </p>
+    </div>
+
+    <div class="settings-section">
+      <h2>LLM (текст)</h2>
+      <label class="field">
+        API-ключ OpenRouter
+        <input type="password" name="openrouter_api_key" value="{{ openrouter_api_key_masked }}" autocomplete="off" placeholder="sk-or-...">
+        <small class="text-muted">Оставьте маскированное значение, чтобы не менять ключ.</small>
+      </label>
+      <label class="field">
+        Модель текста
+        <input name="openrouter_text_model" value="{{ openrouter_text_model }}" required>
+      </label>
+    </div>
+
+    <div class="settings-section">
+      <h2>Картинки</h2>
+      <label class="field field--checkbox">
+        <input type="checkbox" name="enable_ai_images" {% if enable_ai_images %}checked{% endif %}>
+        Генерировать изображения ИИ
+      </label>
+      <label class="field">
+        Модель изображений
+        <input name="openrouter_image_model" value="{{ openrouter_image_model }}" required>
+      </label>
+    </div>
+
+    <div class="settings-actions">
+      <button type="submit" class="button button--accent">Сохранить</button>
+    </div>
+  </form>
+
+  <form class="settings-test-form" method="post" action="{{ base_path }}/settings/test">
+    <button type="submit" class="button button--ghost">Проверить ключ OpenRouter</button>
+  </form>
+
+  <section class="surface-card settings-summary">
+    <h2>Состояние</h2>
+    <dl class="account-list">
+      <div>
+        <dt>Эффективный провайдер</dt>
+        <dd>{{ effective_provider }}</dd>
+      </div>
+      <div>
+        <dt>Модель текста</dt>
+        <dd><code>{{ openrouter_text_model }}</code></dd>
+      </div>
+      <div>
+        <dt>Модель изображений</dt>
+        <dd><code>{{ openrouter_image_model }}</code></dd>
+      </div>
+      <div>
+        <dt>ИИ-картинки</dt>
+        <dd>{% if enable_ai_images %}включены{% else %}выключены{% endif %}</dd>
+      </div>
+    </dl>
+  </section>
+</section>
+{% endblock %}

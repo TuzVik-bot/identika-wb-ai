@@ -83,7 +83,7 @@ def test_openrouter_text_plan_is_applied(tmp_path, monkeypatch) -> None:
         OpenRouterProvider().generate(CreateJobRequest(product=ProductContext(title="Тест")))
     )
     assert result.slides[0].title == "Заголовок 1"
-    assert any("OpenRouter" in warning for warning in result.warnings)
+    assert any("OpenRouter" in item for item in result.info)
 
 
 def test_openrouter_image_generation_stores_background_assets(tmp_path, monkeypatch) -> None:

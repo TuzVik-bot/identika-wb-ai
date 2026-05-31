@@ -34,7 +34,7 @@ docker compose up --build
 
 ### VPS (текущий прод)
 
-- URL: `https://eurasia-transline.online/identika/` (nginx → `127.0.0.1:8787`, Basic Auth на уровне WB Tool).
+- URL: `https://eurasia-transline.online/identika/` (nginx → `127.0.0.1:8787`, единый Basic Auth WB Tool на весь сайт).
 - Код на сервере: `/home/tbot/identika`, systemd: `identika.service`.
 - БД и ассеты: `/home/tbot/.identika/`, `/home/tbot/.identika/assets/` (см. `.env` на сервере).
 - Обязательно: `IDENTIKA_PUBLIC_BASE_PATH=/identika` в `/home/tbot/identika/.env`.
@@ -47,6 +47,8 @@ export SSHPASS='<tbot password>'
 ```
 
 Ручной рестарт на сервере: `sudo systemctl restart identika`.
+
+Nginx для `/identika/`: не кэшировать динамику (`proxy_no_cache 1; proxy_cache_bypass 1;`), не использовать отдельный `auth_basic "Identika"` — только общий вход сайта. Статика `/identika/static/` без пароля. В `.env` не задавать `IDENTIKA_UI_PASSWORD`.
 
 ### Render (альтернатива)
 

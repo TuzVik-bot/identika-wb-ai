@@ -93,7 +93,7 @@ def test_health_and_generation_api_contract(client: TestClient) -> None:
 def test_ui_smoke_pages_demo_redirect_edit_approve_export_and_assets(client: TestClient) -> None:
     home = client.get("/")
     assert home.status_code == 200
-    assert "Aidentika.com" in home.text
+    assert "Identika" in home.text
     assert "Создать проект" in home.text
     assert "/create" in home.text
 

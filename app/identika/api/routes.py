@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 
 from identika import __version__
-from identika.config import settings
+from identika.config import EffectiveSettings, mask_api_key, settings
 from identika.models import CreateJobRequest, ProductContext, ResultTextPatch, SlideTextUpdate
 from identika.services.jobs import JobService
 from identika.services.product_images import attach_source_images
@@ -13,6 +13,17 @@ from identika.services.uploads import save_source_images
 from identika.services.wb_tool import WBToolClient
 
 router = APIRouter()
+
+NO_CACHE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate",
+    "Pragma": "no-cache",
+}
+
+
+def apply_no_cache(response: HTMLResponse | JSONResponse | FileResponse) -> HTMLResponse | JSONResponse | FileResponse:
+    for key, value in NO_CACHE_HEADERS.items():
+        response.headers[key] = value
+    return response
 
 
 def service(request: Request) -> JobService:
@@ -84,20 +95,20 @@ async def create_context(request: Request) -> dict:
 
 
 @router.get("/health")
-async def health() -> dict:
-    return {
-        "ok": True,
-        "version": __version__,
-        "provider": settings.effective_provider,
-        "configured_provider": settings.provider,
-        "image_model": settings.openrouter_image_model
-        if settings.effective_provider == "openrouter"
-        else "mock",
-        "text_model": settings.openrouter_text_model
-        if settings.effective_provider == "openrouter"
-        else "mock",
-        "ai_images": settings.enable_ai_images,
-    }
+async def health(request: Request) -> JSONResponse:
+    eff = EffectiveSettings.resolve(service(request).storage)
+    return JSONResponse(
+        content={
+            "ok": True,
+            "version": __version__,
+            "provider": eff.effective_provider,
+            "configured_provider": eff.provider,
+            "image_model": eff.openrouter_image_model if eff.effective_provider == "openrouter" else "mock",
+            "text_model": eff.openrouter_text_model if eff.effective_provider == "openrouter" else "mock",
+            "ai_images": eff.enable_ai_images,
+        },
+        headers=NO_CACHE_HEADERS,
+    )
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -119,6 +130,84 @@ async def index(request: Request) -> HTMLResponse:
             "page_title": "Кабинет",
         },
     )
+
+
+@router.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request) -> HTMLResponse:
+    eff = EffectiveSettings.resolve(service(request).storage)
+    saved = request.query_params.get("saved") == "ok"
+    test_status = request.query_params.get("test", "")
+    test_error = request.query_params.get("test_error", "")
+    return apply_no_cache(
+        request.app.state.templates.TemplateResponse(
+            request,
+            "settings.html",
+            {
+                "base_path": settings.public_base_path,
+                "active_page": "settings",
+                "page_title": "Настройки",
+                "provider": eff.provider,
+                "effective_provider": eff.effective_provider,
+                "openrouter_api_key_masked": mask_api_key(eff.openrouter_api_key),
+                "openrouter_text_model": eff.openrouter_text_model,
+                "openrouter_image_model": eff.openrouter_image_model,
+                "enable_ai_images": eff.enable_ai_images,
+                "saved": saved,
+                "test_status": test_status,
+                "test_error": test_error,
+            },
+        )
+    )
+
+
+@router.post("/settings")
+async def save_settings(request: Request) -> RedirectResponse:
+    form = await request.form()
+    storage = service(request).storage
+    current = EffectiveSettings.resolve(storage)
+    provider = str(form.get("provider") or "mock").strip().lower()
+    if provider not in {"mock", "openrouter"}:
+        provider = "mock"
+    text_model = str(form.get("openrouter_text_model") or current.openrouter_text_model).strip()
+    image_model = str(form.get("openrouter_image_model") or current.openrouter_image_model).strip()
+    enable_ai_images = str(form.get("enable_ai_images") or "") == "on"
+    api_key_input = str(form.get("openrouter_api_key") or "").strip()
+    values: dict[str, str] = {
+        "provider": provider,
+        "openrouter_text_model": text_model or current.openrouter_text_model,
+        "openrouter_image_model": image_model or current.openrouter_image_model,
+        "enable_ai_images": "true" if enable_ai_images else "false",
+    }
+    if api_key_input and not api_key_input.startswith("••••"):
+        values["openrouter_api_key"] = api_key_input
+    elif current.openrouter_api_key:
+        values["openrouter_api_key"] = current.openrouter_api_key
+    storage.set_settings(values)
+    return RedirectResponse(url=url("/settings?saved=ok"), status_code=303)
+
+
+@router.post("/settings/test")
+async def test_settings(request: Request) -> RedirectResponse:
+    eff = EffectiveSettings.resolve(service(request).storage)
+    if not eff.openrouter_api_key.strip():
+        return RedirectResponse(url=url("/settings?test=missing_key"), status_code=303)
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.get(
+                "https://openrouter.ai/api/v1/models",
+                headers={
+                    "Authorization": f"Bearer {eff.openrouter_api_key}",
+                    "HTTP-Referer": "http://127.0.0.1:8787",
+                    "X-Title": "Identika WB AI",
+                },
+            )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        return RedirectResponse(
+            url=url(f"/settings?test=error&test_error={type(exc).__name__}"),
+            status_code=303,
+        )
+    return RedirectResponse(url=url("/settings?test=ok"), status_code=303)
 
 
 @router.get("/create", response_class=HTMLResponse)
@@ -144,19 +233,21 @@ async def job_page(request: Request, job_id: str) -> HTMLResponse:
     can_approve = bool(job.result and job.status != "approved")
     can_upload = bool(job.result and job.status == "approved")
     upload_status = request.query_params.get("upload", "")
-    return request.app.state.templates.TemplateResponse(
-        request,
-        "job.html",
-        {
-            "job": job,
-            "base_path": settings.public_base_path,
-            "active_page": "jobs",
-            "page_title": job.product_title,
-            "can_edit": can_edit,
-            "can_approve": can_approve,
-            "can_upload": can_upload,
-            "upload_status": upload_status,
-        },
+    return apply_no_cache(
+        request.app.state.templates.TemplateResponse(
+            request,
+            "job.html",
+            {
+                "job": job,
+                "base_path": settings.public_base_path,
+                "active_page": "jobs",
+                "page_title": job.product_title,
+                "can_edit": can_edit,
+                "can_approve": can_approve,
+                "can_upload": can_upload,
+                "upload_status": upload_status,
+            },
+        )
     )
 
 
@@ -230,28 +321,29 @@ async def create_generation_job(
 
 
 @router.get("/v1/generation/jobs")
-async def list_generation_jobs(request: Request) -> dict:
-    return {"items": [job.model_dump(mode="json", exclude={"result"}) for job in service(request).list_jobs()]}
+async def list_generation_jobs(request: Request) -> JSONResponse:
+    payload = {"items": [job.model_dump(mode="json", exclude={"result"}) for job in service(request).list_jobs()]}
+    return JSONResponse(content=payload, headers=NO_CACHE_HEADERS)
 
 
 @router.get("/v1/generation/jobs/{job_id}")
-async def get_generation_job(request: Request, job_id: str) -> dict:
+async def get_generation_job(request: Request, job_id: str) -> JSONResponse:
     try:
         job = service(request).get_job(job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="job not found") from None
-    return job.model_dump(mode="json", exclude={"result"})
+    return JSONResponse(content=job.model_dump(mode="json", exclude={"result"}), headers=NO_CACHE_HEADERS)
 
 
 @router.get("/v1/generation/jobs/{job_id}/result")
-async def get_generation_result(request: Request, job_id: str) -> dict:
+async def get_generation_result(request: Request, job_id: str) -> JSONResponse:
     try:
         job = service(request).get_job(job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="job not found") from None
     if not job.result:
         raise HTTPException(status_code=409, detail=f"job is {job.status}")
-    return job.result.model_dump(mode="json")
+    return JSONResponse(content=job.result.model_dump(mode="json"), headers=NO_CACHE_HEADERS)
 
 
 @router.post("/v1/generation/jobs/{job_id}/approve")

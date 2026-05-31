@@ -6,7 +6,7 @@ import re
 
 import httpx
 
-from identika.config import settings
+from identika.config import EffectiveSettings
 from identika.models import CreateJobRequest, GenerationResult
 from identika.storage import Storage
 
@@ -16,8 +16,10 @@ async def generate_slide_images(
     request: CreateJobRequest,
     result: GenerationResult,
     storage: Storage,
+    eff: EffectiveSettings | None = None,
 ) -> GenerationResult:
-    if not settings.openrouter_api_key:
+    eff = eff or EffectiveSettings.resolve(storage)
+    if not eff.openrouter_api_key:
         result.warnings.append("AI images skipped: OPENROUTER_API_KEY is missing")
         return result
 
@@ -29,7 +31,7 @@ async def generate_slide_images(
     failures = 0
     for slide in result.slides:
         try:
-            image_bytes = await _call_image_model(slide.visual_prompt, request, source_refs, storage)
+            image_bytes = await _call_image_model(slide.visual_prompt, request, source_refs, storage, eff)
             asset_id = storage.add_asset(
                 job_id,
                 f"slide_{slide.index:02d}_bg.png",
@@ -43,9 +45,11 @@ async def generate_slide_images(
                 f"Slide {slide.index}: AI image fallback to programmatic SVG ({type(exc).__name__})"
             )
     if failures == 0:
-        result.warnings.append("Slide backgrounds generated via OpenRouter image model.")
+        result.info.append("Slide backgrounds generated via OpenRouter image model.")
     elif failures < len(result.slides):
-        result.warnings.append(f"Partial AI image success: {len(result.slides) - failures}/{len(result.slides)} slides.")
+        result.info.append(
+            f"Partial AI image success: {len(result.slides) - failures}/{len(result.slides)} slides."
+        )
     return result
 
 
@@ -54,6 +58,7 @@ async def _call_image_model(
     request: CreateJobRequest,
     source_refs: list[str],
     storage: Storage,
+    eff: EffectiveSettings,
 ) -> bytes:
     content: list[dict] = [
         {
@@ -76,14 +81,14 @@ async def _call_image_model(
         )
 
     payload = {
-        "model": settings.openrouter_image_model,
+        "model": eff.openrouter_image_model,
         "messages": [{"role": "user", "content": content}],
         "modalities": ["image", "text"],
     }
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
             "https://openrouter.ai/api/v1/chat/completions",
-            headers=_headers(),
+            headers=_headers(eff),
             json=payload,
         )
     response.raise_for_status()
@@ -113,9 +118,9 @@ def _decode_image_url(url: str) -> bytes:
     raise ValueError("remote image URLs are not supported in image response")
 
 
-def _headers() -> dict[str, str]:
+def _headers(eff: EffectiveSettings) -> dict[str, str]:
     return {
-        "Authorization": f"Bearer {settings.openrouter_api_key}",
+        "Authorization": f"Bearer {eff.openrouter_api_key}",
         "Content-Type": "application/json",
         "HTTP-Referer": "http://127.0.0.1:8787",
         "X-Title": "Identika WB AI",

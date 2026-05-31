@@ -4,7 +4,7 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from identika.config import settings
+from identika.config import EffectiveSettings
 from identika.models import (
     CreateJobRequest,
     GenerationResult,
@@ -14,7 +14,7 @@ from identika.models import (
     TextBlock,
 )
 from identika.providers.openrouter import get_provider
-from identika.services.product_images import prepare_job_request
+from identika.services.product_images import download_product_images, prepare_job_request
 from identika.services.rendering import (
     build_export_zip,
     image_to_data_uri,
@@ -41,10 +41,11 @@ class JobService:
     ) -> JobRecord:
         request = prepare_job_request(request)
         job = self.storage.create_job(request.model_dump(mode="json"))
+        eff = EffectiveSettings.resolve(self.storage)
         if (
             background_tasks is not None
-            and settings.effective_provider == "openrouter"
-            and settings.enable_ai_images
+            and eff.effective_provider == "openrouter"
+            and eff.enable_ai_images
         ):
             background_tasks.add_task(self._run_job_task, job.id, request)
             return self.storage.get_job(job.id)
@@ -59,14 +60,16 @@ class JobService:
     async def _run_job(self, job_id: str, request: CreateJobRequest) -> None:
         started = time.perf_counter()
         self.storage.set_running(job_id)
-        provider_name = settings.effective_provider
+        eff = EffectiveSettings.resolve(self.storage)
+        provider_name = eff.effective_provider
         try:
-            provider = get_provider()
-            result = await provider.generate(request)
-            if settings.enable_ai_images and settings.effective_provider == "openrouter":
+            request.product = await download_product_images(job_id, request.product, self.storage)
+            provider = get_provider(self.storage)
+            result = await provider.generate(request, eff)
+            if eff.enable_ai_images and eff.effective_provider == "openrouter":
                 from identika.providers.image_gen import generate_slide_images
 
-                result = await generate_slide_images(job_id, request, result, self.storage)
+                result = await generate_slide_images(job_id, request, result, self.storage, eff)
             result = self._render_assets(job_id, result)
             self.storage.save_result(job_id, result)
             duration_ms = int((time.perf_counter() - started) * 1000)
@@ -112,6 +115,8 @@ class JobService:
         for slide in result.slides:
             source_uri = source_uris[(slide.index - 1) % len(source_uris)] if source_uris else None
             background_uri = self._background_image_uri(slide.background_asset_id)
+            if slide.role == "white_background" and source_uri:
+                background_uri = None
             data = render_slide_svg(
                 slide,
                 source_image_data_uri=source_uri,

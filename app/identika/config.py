@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+if TYPE_CHECKING:
+    from identika.storage import Storage
 
 
 class Settings(BaseSettings):
@@ -75,3 +80,60 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def _parse_bool(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+@dataclass(frozen=True)
+class EffectiveSettings:
+    provider: str
+    openrouter_api_key: str
+    openrouter_text_model: str
+    openrouter_image_model: str
+    enable_ai_images: bool
+
+    @property
+    def effective_provider(self) -> str:
+        if self.provider == "openrouter" and not self.openrouter_api_key.strip():
+            return "mock"
+        return self.provider
+
+    @classmethod
+    def resolve(cls, storage: Storage | None = None) -> EffectiveSettings:
+        db = storage.get_settings() if storage else {}
+
+        def pick_str(key: str, default: str) -> str:
+            if key in db:
+                return db[key].strip()
+            return default
+
+        provider = pick_str("provider", settings.provider)
+        openrouter_api_key = pick_str("openrouter_api_key", settings.openrouter_api_key)
+        openrouter_text_model = pick_str("openrouter_text_model", settings.openrouter_text_model)
+        openrouter_image_model = pick_str("openrouter_image_model", settings.openrouter_image_model)
+
+        if "enable_ai_images" in db:
+            enable_ai_images = _parse_bool(db["enable_ai_images"])
+        elif settings.identika_enable_ai_images is not None:
+            enable_ai_images = settings.identika_enable_ai_images
+        else:
+            enable_ai_images = (provider or settings.provider) == "openrouter"
+
+        return cls(
+            provider=provider or "mock",
+            openrouter_api_key=openrouter_api_key,
+            openrouter_text_model=openrouter_text_model,
+            openrouter_image_model=openrouter_image_model,
+            enable_ai_images=enable_ai_images,
+        )
+
+
+def mask_api_key(value: str) -> str:
+    clean = value.strip()
+    if not clean:
+        return ""
+    if len(clean) <= 4:
+        return "••••"
+    return f"••••{clean[-4:]}"

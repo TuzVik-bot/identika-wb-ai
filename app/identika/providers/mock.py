@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from identika.config import EffectiveSettings
 from identika.models import (
     CreateJobRequest,
     GenerationResult,
@@ -14,7 +15,11 @@ from identika.providers.base import AiProvider
 class MockProvider(AiProvider):
     name = "mock"
 
-    async def generate(self, request: CreateJobRequest) -> GenerationResult:
+    async def generate(
+        self,
+        request: CreateJobRequest,
+        eff: EffectiveSettings | None = None,
+    ) -> GenerationResult:
         product = request.product
         title = product.title or "Товар WB"
         subject = product.subject_name or "товар"
@@ -70,4 +75,5 @@ class MockProvider(AiProvider):
             slides=slides,
             rich=RichPackage(blocks=rich_blocks),
             warnings=["Mock-режим: реальные AI-изображения не запрашивались."],
+            info=[],
         )

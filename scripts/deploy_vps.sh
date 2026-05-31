@@ -6,6 +6,17 @@
 #   ./scripts/deploy_vps.sh
 #
 # Optional: VPS_HOST, VPS_PORT, VPS_USER, REMOTE_APP
+#
+# Nginx notes (openresty proxy in front of Identika):
+# - Dynamic routes must not be cached. The app sends Cache-Control: no-store on
+#   /jobs/*, /v1/generation/jobs/*, and /health.
+# - In the server block for /identika/, add:
+#     proxy_no_cache 1;
+#     proxy_cache_bypass 1;
+# - Use a single site-wide Basic Auth (WB Tool). Do NOT set a separate
+#   auth_basic "Identika" on /identika/ — remove identika.htpasswd if present.
+# - Keep /identika/static/ with auth_basic off so CSS loads without challenge.
+# - Do not set IDENTIKA_UI_PASSWORD in the app .env (inherit nginx auth only).
 
 set -euo pipefail
 
@@ -48,6 +59,32 @@ sshpass -e rsync -avz \
 
 echo "→ pip install + restart identika.service"
 run_ssh "cd $REMOTE_APP && .venv/bin/pip install -q . && echo '$SSHPASS' | sudo -S systemctl restart identika && sleep 3"
+
+echo "→ nginx: unified auth + no-cache for /identika/ dynamic routes"
+run_ssh "echo '$SSHPASS' | sudo -S bash -s" <<'NGINX'
+set -euo pipefail
+CONF=""
+for candidate in /etc/nginx/sites-enabled/eurasia-transline.online /etc/nginx/conf.d/eurasia-transline.online.conf /etc/nginx/nginx.conf; do
+  if [[ -f "$candidate" ]]; then CONF="$candidate"; break; fi
+done
+if [[ -z "$CONF" ]]; then
+  CONF="$(grep -rl 'location /identika/' /etc/nginx 2>/dev/null | head -1 || true)"
+fi
+if [[ -n "$CONF" ]]; then
+  sed -i '/location \/identika\//,/}/{ /auth_basic "Identika";/d; /auth_basic_user_file \/etc\/nginx\/identika.htpasswd;/d; }' "$CONF" || true
+  if ! grep -q 'proxy_no_cache 1;' "$CONF"; then
+    sed -i '/location \/identika\//a\    proxy_no_cache 1;\n    proxy_cache_bypass 1;' "$CONF" || true
+  fi
+  rm -f /etc/nginx/identika.htpasswd || true
+  nginx -t
+  systemctl reload nginx
+else
+  echo "WARN: nginx config with /identika/ not found — apply proxy_no_cache manually" >&2
+fi
+NGINX
+
+echo "→ ensure IDENTIKA_UI_PASSWORD unset in app .env"
+run_ssh "grep -q '^IDENTIKA_UI_PASSWORD=' $REMOTE_APP/.env 2>/dev/null && sed -i '/^IDENTIKA_UI_PASSWORD=/d' $REMOTE_APP/.env || true"
 
 echo "→ Health check"
 run_ssh "curl -sf http://127.0.0.1:8787/health && echo && wc -l $REMOTE_APP/app/identika/static/app.css && curl -sfI http://127.0.0.1:8787/identika/static/app.css | head -3"

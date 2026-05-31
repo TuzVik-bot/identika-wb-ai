@@ -3,13 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}{% if page_title %}{{ page_title }} · {% endif %}Aidentika{% endblock %}</title>
+  <title>{% block title %}{% if page_title %}{{ page_title }} · {% endif %}Identika{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ base_path }}/static/app.css?v={{ static_version }}">
 </head>
 <body class="page page-{{ active_page or 'default' }}">
   <header class="topbar">
-    <a class="topbar__brand" href="{{ base_path }}/" aria-label="Aidentika dashboard">Aidentika.com</a>
-    <nav class="topbar__nav" aria-label="Основная навигация">
+    <a class="topbar__brand" href="{{ base_path }}/" aria-label="Identika dashboard">
+      <span class="topbar__logo" aria-hidden="true">iD</span>
+      <span>Identika</span>
+    </a>
+    <button class="topbar__burger" type="button" aria-label="Открыть меню" aria-expanded="false" aria-controls="topbar-nav">
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+    </button>
+    <nav class="topbar__nav" id="topbar-nav" aria-label="Основная навигация">
       <a class="topbar__link {% if active_page == 'create' %}is-active{% endif %}" href="{{ base_path }}/create">
         <span aria-hidden="true">+</span>
         <span>Создать проект</span>
@@ -18,13 +29,17 @@
         <span aria-hidden="true">▣</span>
         <span>Все проекты</span>
       </a>
+      <a class="topbar__link {% if active_page == 'settings' %}is-active{% endif %}" href="{{ base_path }}/settings">
+        <span aria-hidden="true">⚙</span>
+        <span>Настройки</span>
+      </a>
     </nav>
     <div class="topbar__account" aria-label="Сводка аккаунта">
       <span class="topbar__spark" aria-label="Сгенерировано проектов">
         <span aria-hidden="true">+</span>
         {% if stats is defined %}{{ stats.generated_count }}{% else %}AI{% endif %}
       </span>
-      <span class="topbar__avatar" aria-hidden="true">ai</span>
+      <span class="topbar__avatar" aria-hidden="true">id</span>
     </div>
   </header>
 
@@ -33,13 +48,31 @@
   </main>
 
   <footer class="app-footer">
-    <a class="footer-brand" href="{{ base_path }}/"><span aria-hidden="true">✦</span> aidentika.com</a>
-    <span>© 2026 Айдентика</span>
+    <a class="footer-brand" href="{{ base_path }}/"><span class="footer-brand__logo" aria-hidden="true">iD</span> Identika</a>
+    <span>© 2026 Identika</span>
     <nav aria-label="Сервисные ссылки">
-      <a href="{{ base_path }}/health">API</a>
+      <a href="{{ base_path }}/settings">Настройки</a>
       <a href="{{ base_path }}/create">Создать проект</a>
       <a href="{{ base_path }}/#projects">Проекты</a>
     </nav>
   </footer>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const burger = document.querySelector('.topbar__burger');
+      const nav = document.getElementById('topbar-nav');
+      if (!burger || !nav) return;
+      burger.addEventListener('click', () => {
+        const open = document.body.classList.toggle('topbar-open');
+        burger.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      nav.querySelectorAll('a').forEach((link) => {
+        link.addEventListener('click', () => {
+          document.body.classList.remove('topbar-open');
+          burger.setAttribute('aria-expanded', 'false');
+        });
+      });
+    });
+  </script>
 </body>
 </html>

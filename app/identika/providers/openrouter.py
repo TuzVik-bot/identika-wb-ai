@@ -6,7 +6,7 @@ import re
 import httpx
 from pydantic import BaseModel, Field, ValidationError
 
-from identika.config import settings
+from identika.config import EffectiveSettings, settings
 from identika.models import CreateJobRequest, GenerationResult
 from identika.providers.base import AiProvider
 from identika.providers.mock import MockProvider
@@ -34,36 +34,43 @@ class _TextPlan(BaseModel):
 class OpenRouterProvider(AiProvider):
     name = "openrouter"
 
-    async def generate(self, request: CreateJobRequest) -> GenerationResult:
-        if not settings.openrouter_api_key.strip():
+    async def generate(
+        self,
+        request: CreateJobRequest,
+        eff: EffectiveSettings | None = None,
+    ) -> GenerationResult:
+        eff = eff or EffectiveSettings.resolve()
+        if not eff.openrouter_api_key.strip():
             result = await MockProvider().generate(request)
-            result.warnings.append(
+            result.warnings = [
                 "IDENTIKA_PROVIDER=openrouter but OPENROUTER_API_KEY is empty; using mock generation."
-            )
+            ]
+            result.info = []
             return result
 
         result = await MockProvider().generate(request)
+        result.warnings = []
+        result.info = []
         result.provider = self.name
-        result.model = f"text={settings.openrouter_text_model}; image={settings.openrouter_image_model}"
+        result.model = f"text={eff.openrouter_text_model}; image={eff.openrouter_image_model}"
         try:
-            plan = await self._call_text_model(request)
+            plan = await self._call_text_model(request, eff)
             self._apply_text_plan(result, plan)
-            result.warnings.extend(plan.warnings)
-            if settings.enable_ai_images:
-                result.warnings.append("Текст сгенерирован OpenRouter; изображения будут запрошены отдельно.")
+            if eff.enable_ai_images:
+                result.info.append("Текст сгенерирован OpenRouter; изображения будут запрошены отдельно.")
             else:
-                result.warnings.append(
+                result.info.append(
                     "Текст сгенерирован OpenRouter; изображения собираются программным renderer."
                 )
         except Exception as exc:
             result.warnings.append(f"OpenRouter text fallback to mock: {type(exc).__name__}")
-        if settings.enable_ai_images:
-            result.warnings.append(f"Image model: {settings.openrouter_image_model}")
+        if eff.enable_ai_images:
+            result.info.append(f"Image model: {eff.openrouter_image_model}")
         return result
 
-    async def _call_text_model(self, request: CreateJobRequest) -> _TextPlan:
+    async def _call_text_model(self, request: CreateJobRequest, eff: EffectiveSettings) -> _TextPlan:
         payload = {
-            "model": settings.openrouter_text_model,
+            "model": eff.openrouter_text_model,
             "temperature": 0.4,
             "response_format": {"type": "json_object"},
             "messages": [
@@ -94,7 +101,7 @@ class OpenRouterProvider(AiProvider):
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 "https://openrouter.ai/api/v1/chat/completions",
-                headers=self._headers(),
+                headers=self._headers(eff),
                 json=payload,
             )
         response.raise_for_status()
@@ -104,9 +111,9 @@ class OpenRouterProvider(AiProvider):
             content = "".join(str(part.get("text", "")) if isinstance(part, dict) else str(part) for part in content)
         return self._parse_text_plan(str(content))
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self, eff: EffectiveSettings) -> dict[str, str]:
         return {
-            "Authorization": f"Bearer {settings.openrouter_api_key}",
+            "Authorization": f"Bearer {eff.openrouter_api_key}",
             "Content-Type": "application/json",
             "HTTP-Referer": "http://127.0.0.1:8787",
             "X-Title": "Identika WB AI",
@@ -151,7 +158,8 @@ class OpenRouterProvider(AiProvider):
                 block.text = incoming.text.strip()
 
 
-def get_provider() -> AiProvider:
-    if settings.effective_provider == "openrouter":
+def get_provider(storage=None) -> AiProvider:
+    eff = EffectiveSettings.resolve(storage)
+    if eff.effective_provider == "openrouter":
         return OpenRouterProvider()
     return MockProvider()

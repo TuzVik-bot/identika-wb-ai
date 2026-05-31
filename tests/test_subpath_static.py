@@ -22,7 +22,7 @@ def test_dashboard_links_prefixed_static_css(subpath_client: TestClient) -> None
     home = subpath_client.get("/")
     assert home.status_code == 200
     assert 'href="/identika/static/app.css?v=' in home.text
-    assert "<title>Кабинет · Aidentika</title>" in home.text
+    assert "<title>Кабинет · Identika</title>" in home.text
 
 
 def test_static_css_served_at_root_and_subpath(subpath_client: TestClient) -> None:

@@ -87,6 +87,7 @@ class GenerationResult(BaseModel):
     slides: list[SlideSpec]
     rich: RichPackage
     warnings: list[str] = Field(default_factory=list)
+    info: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     export_asset_id: str | None = None
 
