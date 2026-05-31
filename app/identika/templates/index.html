@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 
-{% block title %}Кабинет · Aidentika{% endblock %}
 
 {% block content %}
 <section class="profile-hero" aria-labelledby="dashboard-title">
@@ -120,7 +119,11 @@
           <dd>{{ stats.asset_count }}</dd>
         </div>
       </dl>
-      <p class="api-url">WB Tool URL: <code>{{ wb_tool_base_url }}</code></p>
+      {% if wb_tool_display_url %}
+      <p class="api-url">WB Tool URL: <code>{{ wb_tool_display_url }}</code></p>
+      {% elif wb_tool_base_url %}
+      <p class="api-url text-muted">WB Tool подключён локально на сервере.</p>
+      {% endif %}
     </section>
   </aside>
 </section>

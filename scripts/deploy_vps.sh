@@ -50,6 +50,6 @@ echo "→ pip install + restart identika.service"
 run_ssh "cd $REMOTE_APP && .venv/bin/pip install -q . && echo '$SSHPASS' | sudo -S systemctl restart identika && sleep 3"
 
 echo "→ Health check"
-run_ssh "curl -sf http://127.0.0.1:8787/health && echo && wc -l $REMOTE_APP/app/identika/static/app.css"
+run_ssh "curl -sf http://127.0.0.1:8787/health && echo && wc -l $REMOTE_APP/app/identika/static/app.css && curl -sfI http://127.0.0.1:8787/identika/static/app.css | head -3"
 
 echo "✅ Deploy complete. Public URL: https://eurasia-transline.online/identika/"

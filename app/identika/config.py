@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     identika_assets_dir: Path = Path("./assets")
 
     wb_tool_base_url: str = "http://127.0.0.1:8765"
+    wb_tool_public_url: str = ""
     identika_public_base_path: str = ""
 
     openrouter_api_key: str = ""
@@ -48,6 +49,29 @@ class Settings(BaseSettings):
         if not value or value == "/":
             return ""
         return "/" + value.strip("/")
+
+    @property
+    def static_url_prefix(self) -> str:
+        return f"{self.public_base_path}/static"
+
+    def is_static_path(self, path: str) -> bool:
+        if path.startswith("/static/") or path == "/static":
+            return True
+        prefix = self.static_url_prefix
+        return bool(prefix) and (path.startswith(f"{prefix}/") or path == prefix)
+
+    @property
+    def wb_tool_display_url(self) -> str:
+        public = self.wb_tool_public_url.strip().rstrip("/")
+        if public:
+            return public
+        internal = self.wb_tool_base_url.strip().rstrip("/")
+        if not internal:
+            return ""
+        lowered = internal.lower()
+        if "127.0.0.1" in lowered or "localhost" in lowered:
+            return ""
+        return internal
 
 
 settings = Settings()

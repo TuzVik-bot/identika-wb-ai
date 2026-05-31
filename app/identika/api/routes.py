@@ -112,6 +112,7 @@ async def index(request: Request) -> HTMLResponse:
             "stats": dashboard_stats(jobs),
             "account": {"name": "Локальный кабинет", "support_code": "314046"},
             "wb_tool_base_url": settings.wb_tool_base_url,
+            "wb_tool_display_url": settings.wb_tool_display_url,
             "integration_status": "Настроен" if settings.wb_tool_base_url else "Не настроен",
             "base_path": settings.public_base_path,
             "active_page": "dashboard",

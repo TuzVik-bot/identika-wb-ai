@@ -18,7 +18,14 @@ def create_app() -> FastAPI:
     app.state.jobs = JobService()
     base = Path(__file__).parent
     app.state.templates = Jinja2Templates(directory=str(base / "templates"))
-    app.mount("/static", StaticFiles(directory=str(base / "static")), name="static")
+    static_dir = str(base / "static")
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    if settings.public_base_path:
+        app.mount(
+            settings.static_url_prefix,
+            StaticFiles(directory=static_dir),
+            name="static_prefixed",
+        )
     app.add_middleware(UiBasicAuthMiddleware)
     app.add_middleware(ApiKeyMiddleware)
     app.include_router(router)

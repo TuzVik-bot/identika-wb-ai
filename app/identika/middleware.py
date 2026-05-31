@@ -36,7 +36,7 @@ class UiBasicAuthMiddleware(BaseHTTPMiddleware):
         if not settings.identika_ui_password:
             return await call_next(request)
         path = request.url.path
-        if path.startswith("/v1/") or path.startswith("/static/") or path == "/health":
+        if path.startswith("/v1/") or path == "/health" or settings.is_static_path(path):
             return await call_next(request)
         auth = request.headers.get("authorization", "")
         if auth.startswith("Basic "):
