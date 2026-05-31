@@ -57,6 +57,12 @@ sshpass -e rsync -avz \
   "$LOCAL_ROOT/pyproject.toml" \
   "$VPS_USER@$VPS_HOST:$REMOTE_APP/pyproject.toml"
 
+echo "→ rsync scripts/"
+sshpass -e rsync -avz \
+  -e "${RSYNC_E[*]}" \
+  "$LOCAL_ROOT/scripts/" \
+  "$VPS_USER@$VPS_HOST:$REMOTE_APP/scripts/"
+
 echo "→ pip install + restart identika.service"
 run_ssh "cd $REMOTE_APP && .venv/bin/pip install -q . && echo '$SSHPASS' | sudo -S systemctl restart identika && sleep 3"
 
