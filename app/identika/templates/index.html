@@ -44,7 +44,7 @@
       <div class="project-list" aria-label="Последние проекты">
         {% for job in recent_jobs %}
         <a class="project-item" href="{{ base_path }}/jobs/{{ job.id }}">
-          <span class="status status-{{ job.status }}">{{ job.status }}</span>
+          <span class="status status-{{ job.status }}">{{ job.status|status_label }}</span>
           <span class="project-item__body">
             <strong>{{ job.product_title }}</strong>
             <small>store: {{ job.store_slug }}{% if job.nm_id %} · nmID {{ job.nm_id }}{% endif %}{% if job.sku_id %} · SKU {{ job.sku_id }}{% endif %}</small>
@@ -75,6 +75,18 @@
         <strong>{{ stats.total_jobs }}</strong>
         <span>Проекты</span>
         <small>Всего в кабинете</small>
+      </article>
+      <article class="metric-card">
+        <span class="metric-card__mark" aria-hidden="true">◌</span>
+        <strong>{{ stats.running_count }}</strong>
+        <span>В работе</span>
+        <small>Очередь и генерация</small>
+      </article>
+      <article class="metric-card metric-card--danger">
+        <span class="metric-card__mark" aria-hidden="true">!</span>
+        <strong>{{ stats.failed_count }}</strong>
+        <span>Ошибки</span>
+        <small>Требуют внимания</small>
       </article>
     </div>
 

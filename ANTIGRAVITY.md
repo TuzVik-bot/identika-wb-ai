@@ -12,7 +12,7 @@ Identika WB AI - локальный FastAPI-сервис для генераци
 - Rich package: HTML-превью, PDF-превью и 10 rich-блоков.
 - ZIP-экспорт с `manifest.json`, слайдами и rich-файлами.
 - Локальная история jobs в SQLite.
-- UI-кабинет в стиле Aidentika: dashboard, создание проекта, страница результата.
+- UI-кабинет Identika (ребрендинг с Aidentika): dashboard, настройки, создание проекта, страница результата.
 - Безопасная модель данных: WB/B2B/OpenRouter секреты не сохраняются в БД, manifest, ZIP или логах.
 
 По умолчанию проект работает в `mock`-режиме, без внешних AI/WB-вызовов.
@@ -49,7 +49,7 @@ docker compose up --build
 - Проект инициализирован как git-репозиторий (`.gitignore` исключает `data/`, `assets/`, `.env`).
 - БД: `data/identika.sqlite`.
 - Ассеты: `assets/`.
-- `pytest`: 17 тестов (generation, API, UI smoke, upload, OpenRouter mock, WB upload).
+- `pytest`: 43 теста (generation, API, UI smoke, upload, OpenRouter mock, WB upload, settings/rebrand, WB CDN, rerender).
 - GitHub Actions CI: `.github/workflows/ci.yml`.
 
 Не удалять `data/` и `assets/`: это текущая рабочая история и экспортные файлы.
@@ -67,6 +67,10 @@ docker compose up --build
 - `app/identika/services/wb_tool.py` - клиент WB Tool.
 - `app/identika/providers/mock.py` - локальный mock provider.
 - `app/identika/providers/openrouter.py` - OpenRouter text provider поверх mock renderer.
+- `app/identika/providers/prompts.py` - visual/text prompts для OpenRouter (text-free AI backgrounds).
+- `app/identika/services/product_images.py` - скачивание WB CDN фото в локальные ассеты.
+- `app/identika/services/wb_cdn.py` - URL-кандидаты для фото WB.
+- `app/identika/ui_labels.py` - русские подписи статусов jobs.
 - `app/identika/providers/image_gen.py` - OpenRouter image generation layer.
 - `app/identika/services/uploads.py` - multipart upload validation.
 - `app/identika/middleware.py` - optional API key + UI basic auth.
@@ -79,11 +83,12 @@ docker compose up --build
 Уже сделано:
 
 - `base.html` с верхней навигацией, footer и общей оболочкой.
-- `index.html` как dashboard-first кабинет: профиль, проекты, метрики, quick actions, данные аккаунта.
-- `create.html` как рабочая область создания проекта: upload-зона, настройки генерации, WB Tool выбор магазина/товара, demo action.
-- `job.html` уже существует и показывает результат job.
-- `app.css` содержит Aidentika-подобные токены: светлый фон, кислотный green accent, черный текст/акценты, карточки, responsive layout.
-- `routes.py` уже разделяет `/` dashboard и `/create` создание проекта.
+- `index.html` — dashboard: метрики (готово/в работе/ошибки), проекты с русскими статусами, quick actions.
+- `settings.html` — провайдер mock/openrouter, маскированный ключ, модели, тест ключа (БД > env, без рестарта).
+- `create.html` — drag-and-drop upload, loading на submit.
+- `job.html` — блок «Информация о генерации» (warnings vs info), пересборка слайдов, scaled SVG preview.
+- `app.css` — WB Tool стиль (indigo/slate/Inter), mobile burger, slide preview без crop.
+- `routes.py` — `/settings`, `POST /jobs/{id}/re-render`, Cache-Control no-store на динамике.
 
 Важно: продолжать дизайн как рабочий кабинет, а не маркетинговый лендинг.
 
@@ -97,7 +102,9 @@ HTML:
 - `POST /demo` - demo job.
 - `POST /wb/generate` - создать job из WB Tool product context.
 - `POST /jobs/{job_id}/slides/{slide_index}/text` - форма редактирования текста слайда.
-- `POST /jobs/{job_id}/upload-to-wb` - заглушка/интеграционный upload в WB Tool.
+- `GET /settings` — страница настроек (провайдер, ключ, модели).
+- `POST /settings`, `POST /settings/test` — сохранение и проверка OpenRouter.
+- `POST /jobs/{job_id}/re-render` — пересборка SVG с актуальными фото.
 
 JSON/API:
 
@@ -110,7 +117,8 @@ JSON/API:
 - `PATCH /v1/generation/jobs/{job_id}/result/text`
 - `POST /v1/generation/jobs/{job_id}/approve`
 - `GET /v1/generation/jobs/{job_id}/export`
-- `GET /v1/assets/{asset_id}`
+- `POST /jobs/{job_id}/upload-to-wb` - upload в WB Tool.
+- `POST /v1/generation/jobs/{job_id}/re-render` - JSON rerender.
 
 ## Настройки окружения
 
@@ -136,9 +144,8 @@ Runbook для заказчика:
 
 1. Скопировать `.env.example` → `.env`, оставить `IDENTIKA_PROVIDER=mock` для офлайн-демо.
 2. Для AI: `IDENTIKA_PROVIDER=openrouter`, задать `OPENROUTER_API_KEY`, при необходимости `IDENTIKA_ENABLE_AI_IMAGES=true`.
-3. Для production: задать `IDENTIKA_API_KEY` и/или `IDENTIKA_UI_PASSWORD`.
-4. WB upload: поднять WB Tool на `WB_TOOL_BASE_URL`, endpoint `POST /api/ai/jobs/{job_id}/upload`.
-5. `docker compose up --build` или uvicorn; проверить `curl /health` и `pytest`.
+3. Для production на VPS: единый nginx Basic Auth (WB Tool), **не** задавать `IDENTIKA_UI_PASSWORD`; настройки OpenRouter можно править в UI `/settings`.
+4. Деплой: `SSHPASS=... ./scripts/deploy_vps.sh` (rsync + restart + nginx no-cache для `/identika/`).
 
 Не коммитить и не вписывать реальные секреты в документацию.
 

@@ -23,32 +23,31 @@ def image_to_data_uri(path: Path, media_type: str) -> str:
     return f"data:{media_type};base64,{encoded}"
 
 
-def render_slide_svg(
-    slide: SlideSpec,
-    *,
-    source_image_href: str | None = None,
-    background_image_href: str | None = None,
-    source_image_data_uri: str | None = None,
-    background_image_data_uri: str | None = None,
-) -> bytes:
-    # Backward-compatible aliases; prefer explicit href args (URL or data URI).
-    source_image_href = source_image_href or source_image_data_uri
-    background_image_href = background_image_href or background_image_data_uri
-    bg = "#ffffff" if slide.role == "white_background" else "#f4f7fb"
-    accent = "#2f6fed" if slide.role == "hero" else "#243b53"
-    h = slide.height
-    w = slide.width
+def _svg_open(w: int, h: int) -> str:
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+        f'width="100%" height="100%" viewBox="0 0 {w} {h}" preserveAspectRatio="xMidYMid meet">'
+    )
+
+
+def _image_tag(href: str, x: int, y: int, width: int, height: int, *, fit: str = "meet") -> str:
+    escaped_href = html.escape(href, quote=True)
+    return (
+        f'<image href="{escaped_href}" xlink:href="{escaped_href}" '
+        f'x="{x}" y="{y}" width="{width}" height="{height}" '
+        f'preserveAspectRatio="xMidYMid {fit}"/>'
+    )
+
+
+def _text_header_parts(slide: SlideSpec, *, accent: str) -> list[str]:
     title_lines = _wrap(slide.title, 20)
     subtitle_lines = _wrap(slide.subtitle, 32)
-    bullet_lines = slide.bullets[:5]
+    parts: list[str] = []
     y = 90
-    image_href = background_image_href or source_image_href
-    parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{w}" height="{h}" viewBox="0 0 {w} {h}">',
-        f'<rect width="{w}" height="{h}" fill="{bg}"/>',
-        f'<rect x="36" y="36" width="{w-72}" height="{h-72}" rx="22" fill="none" stroke="#d8e2ef" stroke-width="3"/>',
-        f'<text x="70" y="{y}" font-family="Arial, DejaVu Sans, sans-serif" font-size="26" fill="#7b8794">Слайд {slide.index:02d}</text>',
-    ]
+    parts.append(
+        f'<text x="70" y="{y}" font-family="Arial, DejaVu Sans, sans-serif" '
+        f'font-size="26" fill="#7b8794">Слайд {slide.index:02d}</text>'
+    )
     y += 72
     for line in title_lines[:3]:
         parts.append(
@@ -62,30 +61,13 @@ def render_slide_svg(
             f'font-size="30" fill="#334e68">{html.escape(line)}</text>'
         )
         y += 42
-    product_y = 520 if slide.role != "hero" else 570
-    if image_href:
-        escaped_href = html.escape(image_href, quote=True)
-        parts.extend(
-            [
-                f'<rect x="150" y="{product_y}" width="600" height="360" rx="34" fill="#ffffff" stroke="#bcccdc" stroke-width="3"/>',
-                (
-                    f'<image href="{escaped_href}" xlink:href="{escaped_href}" '
-                    f'x="170" y="{product_y + 20}" width="560" height="320" '
-                    f'preserveAspectRatio="xMidYMid meet"/>'
-                ),
-            ]
-        )
-    else:
-        parts.extend(
-            [
-                f'<rect x="150" y="{product_y}" width="600" height="360" rx="34" fill="#ffffff" stroke="#bcccdc" stroke-width="3"/>',
-                f'<ellipse cx="450" cy="{product_y + 260}" rx="210" ry="44" fill="#d9e2ec"/>',
-                f'<rect x="315" y="{product_y + 70}" width="270" height="210" rx="36" fill="#e6f0ff" stroke="#2f6fed" stroke-width="5"/>',
-                f'<text x="450" y="{product_y + 190}" text-anchor="middle" font-family="Arial, DejaVu Sans, sans-serif" font-size="34" font-weight="700" fill="#102a43">ТОВАР</text>',
-            ]
-        )
+    return parts
+
+
+def _text_bullet_parts(slide: SlideSpec, *, accent: str) -> list[str]:
+    parts: list[str] = []
     y = 950
-    for bullet in bullet_lines:
+    for bullet in slide.bullets[:5]:
         clean = html.escape(str(bullet))
         parts.append(f'<circle cx="86" cy="{y-10}" r="8" fill="{accent}"/>')
         parts.append(
@@ -93,8 +75,132 @@ def render_slide_svg(
             f'font-size="28" fill="#102a43">{clean}</text>'
         )
         y += 42
+    return parts
+
+
+def _frame_border(w: int, h: int) -> str:
+    return f'<rect x="36" y="36" width="{w-72}" height="{h-72}" rx="22" fill="none" stroke="#d8e2ef" stroke-width="3"/>'
+
+
+def _text_overlay_parts(slide: SlideSpec, *, accent: str) -> list[str]:
+    parts = _text_header_parts(slide, accent=accent)
+    parts.extend(_text_bullet_parts(slide, accent=accent))
+    parts.append(_frame_border(slide.width, slide.height))
+    return parts
+
+
+def _render_full_background(slide: SlideSpec, background_href: str) -> bytes:
+    w, h = slide.width, slide.height
+    accent = "#2f6fed" if slide.role == "hero" else "#243b53"
+    parts = [
+        _svg_open(w, h),
+        _image_tag(background_href, 0, 0, w, h, fit="meet"),
+        '<defs><linearGradient id="topScrim" x1="0" y1="0" x2="0" y2="1">'
+        '<stop offset="0%" stop-color="#ffffff" stop-opacity="0.92"/>'
+        '<stop offset="55%" stop-color="#ffffff" stop-opacity="0.55"/>'
+        '<stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>'
+        "</linearGradient></defs>",
+        f'<rect x="0" y="0" width="{w}" height="520" fill="url(#topScrim)"/>',
+    ]
+    if slide.bullets:
+        parts.extend(
+            [
+                '<defs><linearGradient id="bottomScrim" x1="0" y1="0" x2="0" y2="1">'
+                '<stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>'
+                '<stop offset="35%" stop-color="#ffffff" stop-opacity="0.72"/>'
+                '<stop offset="100%" stop-color="#ffffff" stop-opacity="0.95"/>'
+                "</linearGradient></defs>",
+                f'<rect x="0" y="820" width="{w}" height="380" fill="url(#bottomScrim)"/>',
+            ]
+        )
+    parts.extend(_text_overlay_parts(slide, accent=accent))
     parts.append("</svg>")
     return "\n".join(parts).encode("utf-8")
+
+
+def _render_white_background(slide: SlideSpec, source_href: str) -> bytes:
+    w, h = slide.width, slide.height
+    margin_x = 80
+    margin_y = 120
+    img_w = w - margin_x * 2
+    img_h = h - margin_y * 2
+    parts = [
+        _svg_open(w, h),
+        f'<rect width="{w}" height="{h}" fill="#ffffff"/>',
+        _image_tag(source_href, margin_x, margin_y, img_w, img_h, fit="meet"),
+        f'<rect x="36" y="36" width="{w-72}" height="{h-72}" rx="22" fill="none" stroke="#e2e8f0" stroke-width="3"/>',
+        "</svg>",
+    ]
+    return "\n".join(parts).encode("utf-8")
+
+
+def _render_product_composite(slide: SlideSpec, source_href: str) -> bytes:
+    w, h = slide.width, slide.height
+    bg = "#f4f7fb"
+    accent = "#2f6fed" if slide.role == "hero" else "#243b53"
+    product_y = 520 if slide.role != "hero" else 570
+    parts = [
+        _svg_open(w, h),
+        f'<rect width="{w}" height="{h}" fill="{bg}"/>',
+        _frame_border(w, h),
+    ]
+    parts.extend(_text_header_parts(slide, accent=accent))
+    parts.extend(
+        [
+            f'<rect x="150" y="{product_y}" width="600" height="360" rx="34" fill="#ffffff" stroke="#bcccdc" stroke-width="3"/>',
+            _image_tag(source_href, 170, product_y + 20, 560, 320, fit="meet"),
+        ]
+    )
+    parts.extend(_text_bullet_parts(slide, accent=accent))
+    parts.append("</svg>")
+    return "\n".join(parts).encode("utf-8")
+
+
+def _render_placeholder(slide: SlideSpec) -> bytes:
+    w, h = slide.width, slide.height
+    bg = "#ffffff" if slide.role == "white_background" else "#f4f7fb"
+    accent = "#2f6fed" if slide.role == "hero" else "#243b53"
+    product_y = 520 if slide.role != "hero" else 570
+    parts = [
+        _svg_open(w, h),
+        f'<rect width="{w}" height="{h}" fill="{bg}"/>',
+        f'<rect x="36" y="36" width="{w-72}" height="{h-72}" rx="22" fill="none" stroke="#d8e2ef" stroke-width="3"/>',
+    ]
+    parts.extend(_text_overlay_parts(slide, accent=accent))
+    parts.extend(
+        [
+            f'<rect x="150" y="{product_y}" width="600" height="360" rx="34" fill="#ffffff" stroke="#bcccdc" stroke-width="3"/>',
+            f'<ellipse cx="450" cy="{product_y + 260}" rx="210" ry="44" fill="#d9e2ec"/>',
+            f'<rect x="315" y="{product_y + 70}" width="270" height="210" rx="36" fill="#e6f0ff" stroke="#2f6fed" stroke-width="5"/>',
+            f'<text x="450" y="{product_y + 190}" text-anchor="middle" font-family="Arial, DejaVu Sans, sans-serif" font-size="34" font-weight="700" fill="#102a43">ТОВАР</text>',
+        ]
+    )
+    parts.append("</svg>")
+    return "\n".join(parts).encode("utf-8")
+
+
+def render_slide_svg(
+    slide: SlideSpec,
+    *,
+    source_image_href: str | None = None,
+    background_image_href: str | None = None,
+    source_image_data_uri: str | None = None,
+    background_image_data_uri: str | None = None,
+) -> bytes:
+    source_image_href = source_image_href or source_image_data_uri
+    background_image_href = background_image_href or background_image_data_uri
+
+    if slide.role == "white_background":
+        product_href = source_image_href or background_image_href
+        if product_href:
+            return _render_white_background(slide, product_href)
+        return _render_placeholder(slide)
+
+    if background_image_href:
+        return _render_full_background(slide, background_image_href)
+    if source_image_href:
+        return _render_product_composite(slide, source_image_href)
+    return _render_placeholder(slide)
 
 
 def render_pdf_preview(result: GenerationResult) -> bytes:

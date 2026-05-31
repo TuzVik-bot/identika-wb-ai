@@ -10,6 +10,7 @@ from identika.models import (
     TextBlock,
 )
 from identika.providers.base import AiProvider
+from identika.providers.prompts import WHITE_BG_ANGLE_SUBTITLES, WHITE_BG_ANGLE_TITLES, apply_visual_prompts
 
 
 class MockProvider(AiProvider):
@@ -47,8 +48,9 @@ class MockProvider(AiProvider):
                 ]
             else:
                 role = "white_background"
-                slide_title = f"{title[:46]} на белом фоне"
-                subtitle = "Чистое товарное фото для галереи"
+                angle_idx = idx - 6
+                slide_title = WHITE_BG_ANGLE_TITLES[angle_idx]
+                subtitle = WHITE_BG_ANGLE_SUBTITLES[angle_idx]
                 bullets = []
             slides.append(
                 SlideSpec(
@@ -57,7 +59,7 @@ class MockProvider(AiProvider):
                     title=slide_title,
                     subtitle=subtitle,
                     bullets=bullets,
-                    visual_prompt=f"WB product slide {idx}, clean marketplace style, {subject}",
+                    visual_prompt="",
                     text_blocks=[
                         TextBlock(kind="title", text=slide_title),
                         TextBlock(kind="subtitle", text=subtitle, y=0.24, size=28),
@@ -68,7 +70,7 @@ class MockProvider(AiProvider):
             RichBlock(index=i, title=f"Блок {i}: {slides[i-1].title}", text=slides[i-1].subtitle)
             for i in range(1, 11)
         ]
-        return GenerationResult(
+        result = GenerationResult(
             provider=self.name,
             model="mock-layout-v1",
             product=product,
@@ -77,3 +79,5 @@ class MockProvider(AiProvider):
             warnings=["Mock-режим: реальные AI-изображения не запрашивались."],
             info=[],
         )
+        apply_visual_prompts(result, request)
+        return result

@@ -11,11 +11,11 @@
         <span>01</span>
       </div>
       <form id="source-upload-form" class="upload-form" enctype="multipart/form-data">
-        <label class="drop-zone" for="source-images-input">
+        <label class="drop-zone" for="source-images-input" id="drop-zone">
           <input id="source-images-input" type="file" name="files" accept="image/*" multiple>
           <span class="drop-zone__icon" aria-hidden="true">▧</span>
           <strong>Перетащите фото сюда</strong>
-          <small>или выберите файл</small>
+          <small>или выберите файл (до 4 фото)</small>
         </label>
         <div id="source-preview" class="source-preview" hidden aria-live="polite"></div>
         <input type="hidden" id="source-image-asset-ids" name="source_image_asset_ids" value="">
@@ -68,7 +68,7 @@
         </div>
       </details>
 
-      <form method="post" action="{{ base_path }}/demo" class="demo-action">
+      <form method="post" action="{{ base_path }}/demo" class="demo-action" data-submit-loading>
         <button type="submit" class="button button--accent">Сгенерировать демо</button>
       </form>
     </section>
@@ -89,7 +89,7 @@
           <h3>{{ product.title or product.vendor_code or product.nm_id or product.sku_id }}</h3>
           <p>SKU {{ product.sku_id }}{% if product.nm_id %} · nmID {{ product.nm_id }}{% endif %}{% if product.subject_name %} · {{ product.subject_name }}{% endif %}</p>
         </div>
-        <form method="post" action="{{ base_path }}/wb/generate" class="wb-generate-form">
+        <form method="post" action="{{ base_path }}/wb/generate" class="wb-generate-form" data-submit-loading>
           <input type="hidden" name="account_id" value="{{ selected_account_id }}">
           <input type="hidden" name="sku_id" value="{{ product.sku_id }}">
           <input type="hidden" name="brief" value="{{ brief }}">
@@ -184,8 +184,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const preview = document.getElementById('source-preview');
   const idsField = document.getElementById('source-image-asset-ids');
   const statusEl = document.getElementById('upload-status');
+  const dropZone = document.getElementById('drop-zone');
   const generateFields = document.querySelectorAll('.source-image-ids-field');
   const basePath = {{ base_path|tojson }};
+
+  document.querySelectorAll('[data-submit-loading]').forEach((form) => {
+    form.addEventListener('submit', () => {
+      const button = form.querySelector('button[type="submit"]');
+      if (!button || button.disabled) return;
+      button.disabled = true;
+      button.dataset.originalLabel = button.textContent;
+      button.textContent = 'Запуск генерации…';
+    });
+  });
 
   async function uploadFiles(fileList) {
     const files = Array.from(fileList || []).slice(0, 4);
@@ -218,6 +229,27 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   input.addEventListener('change', () => uploadFiles(input.files));
+
+  if (dropZone) {
+    ['dragenter', 'dragover'].forEach((eventName) => {
+      dropZone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        dropZone.classList.add('is-dragover');
+      });
+    });
+    ['dragleave', 'drop'].forEach((eventName) => {
+      dropZone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        dropZone.classList.remove('is-dragover');
+      });
+    });
+    dropZone.addEventListener('drop', (event) => {
+      const files = event.dataTransfer?.files;
+      if (files?.length) {
+        uploadFiles(files);
+      }
+    });
+  }
 });
 </script>
 {% endblock %}

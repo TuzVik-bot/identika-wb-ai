@@ -15,6 +15,7 @@ from identika.services.product_images import (
 )
 from identika.services.wb_cdn import wb_basket_id, wb_image_url_candidates
 from identika.storage import Storage
+from identika.ui_labels import job_status_label
 
 
 @pytest.fixture()
@@ -182,6 +183,58 @@ def test_settings_preserves_masked_api_key(client: TestClient, tmp_path) -> None
     storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
     eff = EffectiveSettings.resolve(storage)
     assert eff.openrouter_api_key == "sk-or-initial-key-9999"
+
+
+def test_dashboard_shows_russian_status_and_running_metrics(client: TestClient) -> None:
+    demo = client.post("/demo")
+    assert demo.status_code == 303
+    home = client.get("/")
+    assert home.status_code == 200
+    assert "Готово" in home.text
+    assert "В работе" in home.text
+    assert "status-succeeded" in home.text
+    assert job_status_label("succeeded") == "Готово"
+    assert job_status_label("failed") == "Ошибка"
+
+
+def test_settings_provider_applies_to_next_job(client: TestClient, tmp_path) -> None:
+    client.post(
+        "/settings",
+        data={
+            "provider": "mock",
+            "openrouter_api_key": "",
+            "openrouter_text_model": "test/text-model",
+            "openrouter_image_model": "test/image-model",
+        },
+    )
+    demo = client.post("/demo")
+    job_id = demo.headers["location"].split("/")[-1]
+    result = client.get(f"/v1/generation/jobs/{job_id}/result").json()
+    assert result["provider"] == "mock"
+
+    client.post(
+        "/settings",
+        data={
+            "provider": "openrouter",
+            "openrouter_api_key": "sk-or-test-key",
+            "openrouter_text_model": "test/text-model",
+            "openrouter_image_model": "test/image-model",
+        },
+    )
+    demo2 = client.post("/demo")
+    job_id2 = demo2.headers["location"].split("/")[-1]
+    result2 = client.get(f"/v1/generation/jobs/{job_id2}/result").json()
+    assert result2["provider"] == "openrouter"
+
+
+def test_job_page_has_generation_meta_and_rerender(client: TestClient) -> None:
+    demo = client.post("/demo")
+    job_id = demo.headers["location"].split("/")[-1]
+    page = client.get(f"/jobs/{job_id}")
+    assert page.status_code == 200
+    assert "Информация о генерации" in page.text
+    assert "Пересобрать слайды" in page.text
+    assert "Статус генерации" in page.text or "mock" in page.text
 
 
 def test_wb_cdn_url_candidates_from_nm_id() -> None:

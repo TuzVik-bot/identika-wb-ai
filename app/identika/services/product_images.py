@@ -134,8 +134,11 @@ async def download_product_images(
     storage: Storage,
 ) -> tuple[ProductContext, list[str]]:
     had_explicit_urls = bool(_pending_urls(product))
+    existing_sources = [
+        img for img in product.images if img.role == "source" and img.asset_id
+    ]
     needs_cdn_fallback = (
-        not _has_source_assets(product)
+        not existing_sources
         and not had_explicit_urls
         and bool(product.nm_id and product.nm_id > 0)
     )
@@ -178,9 +181,11 @@ async def download_product_images(
             image.asset_id = asset_id
             if not image.role:
                 image.role = "source"
-    downloaded_images = [img for img in images if img.asset_id]
+    downloaded_images = [img for img in images if img.asset_id and img.role == "source"]
     if downloaded_images:
         product.images = downloaded_images
+    elif existing_sources:
+        product.images = existing_sources
     elif not needs_cdn_fallback:
         product.images = images
     else:

@@ -8,6 +8,7 @@ import httpx
 
 from identika.config import EffectiveSettings
 from identika.models import CreateJobRequest, GenerationResult
+from identika.providers.prompts import build_image_model_user_prompt, should_skip_ai_image
 from identika.storage import Storage
 
 
@@ -29,9 +30,15 @@ async def generate_slide_images(
         if image.role == "source" and image.asset_id
     ]
     failures = 0
+    skipped = 0
+    attempted = 0
     for slide in result.slides:
+        if should_skip_ai_image(slide, source_refs):
+            skipped += 1
+            continue
+        attempted += 1
         try:
-            image_bytes = await _call_image_model(slide.visual_prompt, request, source_refs, storage, eff)
+            image_bytes = await _call_image_model(slide, request, source_refs, storage, eff)
             asset_id = storage.add_asset(
                 job_id,
                 f"slide_{slide.index:02d}_bg.png",
@@ -44,35 +51,36 @@ async def generate_slide_images(
             result.warnings.append(
                 f"Slide {slide.index}: AI image fallback to programmatic SVG ({type(exc).__name__})"
             )
-    if failures == len(result.slides):
+    if attempted == 0 and skipped:
+        result.info.append(
+            f"AI images skipped for {skipped} slide(s): using real product photos and programmatic layout."
+        )
+    elif failures == attempted and attempted:
         result.warnings.append(
             "AI-изображения не сгенерированы: все запросы к OpenRouter image model завершились ошибкой. "
             "Проверьте OPENROUTER_IMAGE_MODEL и баланс OpenRouter."
         )
-    elif failures == 0:
+    elif failures == 0 and attempted:
         result.info.append("Slide backgrounds generated via OpenRouter image model.")
-    elif failures < len(result.slides):
+    elif failures < attempted:
         result.info.append(
-            f"Partial AI image success: {len(result.slides) - failures}/{len(result.slides)} slides."
+            f"Partial AI image success: {attempted - failures}/{attempted} slides."
         )
     return result
 
 
 async def _call_image_model(
-    visual_prompt: str,
+    slide,
     request: CreateJobRequest,
     source_refs: list[str],
     storage: Storage,
     eff: EffectiveSettings,
 ) -> bytes:
+    prompt_text = build_image_model_user_prompt(slide, slide.visual_prompt, request)
     content: list[dict] = [
         {
             "type": "text",
-            "text": (
-                "Generate a marketplace product slide background image. "
-                f"Prompt: {visual_prompt}. Brief: {request.brief}. "
-                f"Product: {request.product.title}."
-            ),
+            "text": prompt_text,
         }
     ]
     for asset_id in source_refs[:1]:

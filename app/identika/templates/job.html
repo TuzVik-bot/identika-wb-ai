@@ -7,7 +7,7 @@
   <header class="surface-card job-hero">
     <div class="job-hero__copy">
       <a href="{{ base_path }}/" class="back-link">← Все проекты</a>
-      <span class="status status-{{ job.status }}">{{ job.status }}</span>
+      <span class="status status-{{ job.status }}">{{ job.status|status_label }}</span>
       <h1 id="job-title">{{ job.product_title }}</h1>
       <p class="text-muted">store: {{ job.store_slug }}{% if job.nm_id %} · nmID {{ job.nm_id }}{% endif %}{% if job.sku_id %} · SKU {{ job.sku_id }}{% endif %}</p>
     </div>
@@ -39,10 +39,40 @@
   {% elif request.query_params.get('rerender') == 'ok' %}
   <section class="surface-card notice notice--success">Слайды пересобраны с актуальными фото.</section>
   {% elif job.status in ['queued', 'running'] and not job.result %}
-  <section class="surface-card notice" id="job-running-notice">
-    Генерация выполняется… статус: <strong>{{ job.status }}</strong>
+  <section class="surface-card notice notice--running" id="job-running-notice">
+    <p class="job-running__title">Генерация выполняется…</p>
+    <p class="text-muted">Статус: <strong>{{ job.status|status_label }}</strong>. Страница обновится автоматически.</p>
   </section>
   {% elif job.result %}
+  <section class="surface-card job-generation-meta" aria-label="Информация о генерации">
+    <div class="job-generation-meta__main">
+      <span class="status status-{{ job.status }}">{{ job.status|status_label }}</span>
+      <p>
+        <strong>{{ job.result.provider }}</strong>
+        {% if job.result.model %} · {{ job.result.model }}{% endif %}
+      </p>
+    </div>
+    {% if job.result.warnings %}
+    <div class="job-generation-meta__warnings">
+      <h3>Предупреждения</h3>
+      <ul class="warnings-list">
+        {% for warning in job.result.warnings %}
+        <li>{{ warning }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    {% if job.result.info %}
+    <div class="job-generation-meta__info">
+      <h3>Статус генерации</h3>
+      <ul class="info-list">
+        {% for item in job.result.info %}
+        <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </section>
   <section class="job-summary" aria-label="Сводка проекта">
     <article class="metric-card metric-card--accent">
       <strong>{{ job.result.slides|length }}</strong>
@@ -80,7 +110,9 @@
         <div class="slide-grid">
           {% for slide in job.result.slides %}
           <article class="slide-tile">
-            <iframe src="{{ base_path }}/v1/assets/{{ slide.asset_id }}" title="slide {{ slide.index }}" loading="lazy"></iframe>
+            <div class="slide-preview" aria-hidden="true">
+              <iframe src="{{ base_path }}/v1/assets/{{ slide.asset_id }}" title="slide {{ slide.index }}" loading="lazy" scrolling="no"></iframe>
+            </div>
             <div class="slide-tile__body">
               <span class="role">{{ slide.role }}</span>
               <h3>{{ slide.index }}. {{ slide.title }}</h3>
@@ -160,6 +192,12 @@
                 <a class="button button--accent button--lg" href="{{ base_path }}/v1/generation/jobs/{{ job.id }}/export">
                   <span>📥 Скачать ZIP-архив</span>
                 </a>
+
+                <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/re-render">
+                  <button type="submit" class="button button--ghost button--lg" title="Пересобрать SVG с актуальными фото">
+                    ↻ Пересобрать слайды
+                  </button>
+                </form>
                 
                 <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/upload-to-wb">
                   <button type="submit" class="button button--dark button--lg" {% if not can_upload %}disabled title="Сначала утвердите проект"{% endif %}>

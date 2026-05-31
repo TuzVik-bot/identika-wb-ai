@@ -32,7 +32,7 @@ def test_mock_provider_returns_exactly_ten_slides_with_roles() -> None:
     assert len(result.rich.blocks) == 10
 
 
-def test_render_slide_svg_uses_external_href() -> None:
+def test_render_slide_svg_uses_full_bleed_background() -> None:
     from identika.models import SlideSpec
     from identika.services.rendering import render_slide_svg
 
@@ -42,9 +42,37 @@ def test_render_slide_svg_uses_external_href() -> None:
         background_image_href="/identika/v1/assets/bg123",
     ).decode("utf-8")
     assert '<image href="/identika/v1/assets/bg123"' in svg
-    assert 'xlink:href="/identika/v1/assets/bg123"' in svg
+    assert 'x="0" y="0" width="900" height="1200"' in svg
+    assert 'viewBox="0 0 900 1200"' in svg
+    assert 'preserveAspectRatio="xMidYMid meet"' in svg
+    assert 'width="560" height="320"' not in svg
     assert "ТОВАР" not in svg
     assert "data:image" not in svg
+
+
+def test_render_slide_svg_white_background_centers_product() -> None:
+    from identika.models import SlideSpec
+    from identika.services.rendering import render_slide_svg
+
+    slide = SlideSpec(index=6, role="white_background", title="Фото", subtitle="")
+    svg = render_slide_svg(
+        slide,
+        source_image_href="/identika/v1/assets/product.png",
+    ).decode("utf-8")
+    assert 'x="80" y="120" width="740" height="960"' in svg
+    assert "Слайд 06" not in svg
+    assert 'fill="#ffffff"' in svg
+
+
+def test_render_slide_svg_has_wb_dimensions() -> None:
+    from identika.models import SlideSpec
+    from identika.services.rendering import render_slide_svg
+
+    slide = SlideSpec(index=2, role="description", title="A", subtitle="B")
+    svg = render_slide_svg(slide).decode("utf-8")
+    assert 'viewBox="0 0 900 1200"' in svg
+    assert 'width="100%" height="100%"' in svg
+    assert 'preserveAspectRatio="xMidYMid meet"' in svg
 
 
 def test_job_service_slide_svg_references_product_image_not_placeholder(tmp_path) -> None:
@@ -146,3 +174,93 @@ def test_patch_result_text_updates_manifest_export(tmp_path) -> None:
     with zipfile.ZipFile(export_path) as zf:
         manifest = zf.read("manifest.json").decode("utf-8")
     assert "Новый заголовок" in manifest
+
+
+def test_white_background_slides_use_product_photo_not_ai_background(tmp_path) -> None:
+    png = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108020000009077"
+        "530000000a49444154789c6260000000020001e221bc330000000049454e44ae426082"
+    )
+    storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
+    service = JobService(storage)
+    job = storage.create_job(
+        CreateJobRequest(product=ProductContext(title="Мышь")).model_dump(mode="json")
+    )
+    source_id = storage.add_asset(job.id, "product.png", png, "image/png")
+    product = ProductContext(
+        title="Мышь",
+        images=[ProductImage(asset_id=source_id, role="source")],
+    )
+    result = asyncio.run(MockProvider().generate(CreateJobRequest(product=product)))
+    result.product = product
+    for slide in result.slides[5:]:
+        slide.background_asset_id = "fake-ai-bg"
+    rendered = service._render_assets(job.id, result)
+    slide6_path, _ = storage.get_asset(rendered.slides[5].asset_id)
+    svg = slide6_path.read_text(encoding="utf-8")
+    assert f"/v1/assets/{source_id}" in svg
+    assert "fake-ai-bg" not in svg
+    assert 'fill="#ffffff"' in svg
+    assert "<image" in svg
+
+
+def test_description_slides_prefer_composite_over_ai_background(tmp_path) -> None:
+    png = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108020000009077"
+        "530000000a49444154789c6260000000020001e221bc330000000049454e44ae426082"
+    )
+    storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
+    service = JobService(storage)
+    job = storage.create_job(
+        CreateJobRequest(product=ProductContext(title="Мышь")).model_dump(mode="json")
+    )
+    source_id = storage.add_asset(job.id, "product.png", png, "image/png")
+    bg_id = storage.add_asset(job.id, "bg.png", png, "image/png")
+    product = ProductContext(
+        title="Мышь",
+        images=[ProductImage(asset_id=source_id, role="source")],
+    )
+    result = asyncio.run(MockProvider().generate(CreateJobRequest(product=product)))
+    result.product = product
+    result.slides[1].background_asset_id = bg_id
+    rendered = service._render_assets(job.id, result)
+    slide2_path, _ = storage.get_asset(rendered.slides[1].asset_id)
+    svg = slide2_path.read_text(encoding="utf-8")
+    assert f"/v1/assets/{source_id}" in svg
+    assert f"/v1/assets/{bg_id}" not in svg
+    assert 'width="560" height="320"' in svg
+
+
+def test_white_background_falls_back_to_ai_background_without_sources(tmp_path) -> None:
+    png = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108020000009077"
+        "530000000a49444154789c6260000000020001e221bc330000000049454e44ae426082"
+    )
+    storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
+    service = JobService(storage)
+    job = storage.create_job(
+        CreateJobRequest(product=ProductContext(title="Мышь")).model_dump(mode="json")
+    )
+    bg_id = storage.add_asset(job.id, "white_bg.png", png, "image/png")
+    result = asyncio.run(MockProvider().generate(CreateJobRequest(product=ProductContext(title="Мышь"))))
+    result.slides[5].background_asset_id = bg_id
+    rendered = service._render_assets(job.id, result)
+    slide6_path, _ = storage.get_asset(rendered.slides[5].asset_id)
+    svg = slide6_path.read_text(encoding="utf-8")
+    assert f"/v1/assets/{bg_id}" in svg
+    assert "ТОВАР" not in svg
+
+
+    from identika.providers.prompts import build_visual_prompt, should_skip_ai_image
+
+    request = CreateJobRequest(product=product())
+    result = asyncio.run(MockProvider().generate(request))
+    hero_prompt = build_visual_prompt(result.slides[0], request)
+    desc_prompt = build_visual_prompt(result.slides[2], request)
+    white_prompt = build_visual_prompt(result.slides[5], request)
+    assert "NO text" in hero_prompt
+    assert "NO text" in desc_prompt
+    assert "white background" in white_prompt.lower()
+    assert result.slides[5].title == "Вид сверху"
+    assert should_skip_ai_image(result.slides[5], ["asset-1"])
+    assert not should_skip_ai_image(result.slides[0], ["asset-1"])

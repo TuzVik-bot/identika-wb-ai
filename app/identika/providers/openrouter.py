@@ -10,6 +10,7 @@ from identika.config import EffectiveSettings, settings
 from identika.models import CreateJobRequest, GenerationResult
 from identika.providers.base import AiProvider
 from identika.providers.mock import MockProvider
+from identika.providers.prompts import OPENROUTER_TEXT_SYSTEM_PROMPT, apply_visual_prompts
 
 
 class _SlideText(BaseModel):
@@ -56,6 +57,7 @@ class OpenRouterProvider(AiProvider):
         try:
             plan = await self._call_text_model(request, eff)
             self._apply_text_plan(result, plan)
+            apply_visual_prompts(result, request)
             if eff.enable_ai_images:
                 result.info.append("Текст сгенерирован OpenRouter; изображения будут запрошены отдельно.")
             else:
@@ -76,14 +78,7 @@ class OpenRouterProvider(AiProvider):
             "messages": [
                 {
                     "role": "system",
-                    "content": (
-                        "Ты маркетолог Wildberries. Верни только JSON без markdown. "
-                        "Сделай структуру для 10 слайдов карточки товара: "
-                        "1 hero, 2-5 описательные, 6-10 белый фон. "
-                        "Русский текст должен быть коротким, честным, без недоказуемых обещаний. "
-                        "Схема: {slides:[{index,title,subtitle,bullets}], "
-                        "rich_blocks:[{index,title,text}], warnings:[string]}."
-                    ),
+                    "content": OPENROUTER_TEXT_SYSTEM_PROMPT,
                 },
                 {
                     "role": "user",
@@ -156,6 +151,12 @@ class OpenRouterProvider(AiProvider):
             if incoming:
                 block.title = incoming.title.strip()
                 block.text = incoming.text.strip()
+        # LLM product disclaimers stay out of service warnings (shown only in info if needed).
+        if plan.warnings:
+            for item in plan.warnings:
+                clean = item.strip()
+                if clean:
+                    result.info.append(f"Заметка ИИ: {clean}")
 
 
 def get_provider(storage=None) -> AiProvider:

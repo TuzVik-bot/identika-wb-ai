@@ -124,8 +124,12 @@ class JobService:
     ) -> tuple[str | None, str | None]:
         source_href = source_hrefs[(slide.index - 1) % len(source_hrefs)] if source_hrefs else None
         background_href = self._asset_image_href(slide.background_asset_id, embed=embed)
-        if slide.role == "white_background" and source_href:
-            background_href = None
+        if slide.role == "white_background":
+            if source_href:
+                return source_href, None
+            return None, background_href
+        if slide.role == "description" and source_href:
+            return source_href, None
         return source_href, background_href
 
     def _render_assets(self, job_id: str, result: GenerationResult) -> GenerationResult:
