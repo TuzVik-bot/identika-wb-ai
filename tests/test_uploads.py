@@ -59,7 +59,7 @@ def test_upload_success_returns_asset_ids(client: TestClient) -> None:
     assert payload["session_id"]
 
 
-def test_job_with_source_images_embeds_data_uri_in_svg(tmp_path) -> None:
+def test_job_with_source_images_references_asset_in_svg(tmp_path) -> None:
     storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
     asset_id = storage.add_staging_asset("test-session", "source.png", _png_bytes(), "image/png")
     service = JobService(storage)
@@ -74,5 +74,9 @@ def test_job_with_source_images_embeds_data_uri_in_svg(tmp_path) -> None:
     assert job.result is not None
     slide_path, _ = storage.get_asset(job.result.slides[0].asset_id)
     svg = slide_path.read_text(encoding="utf-8")
-    assert "data:image/png;base64," in svg
+    assert f"/v1/assets/{asset_id}" in svg
     assert "ТОВАР" not in svg
+    export_path, _ = storage.get_asset(job.result.export_asset_id)
+    with zipfile.ZipFile(export_path) as zf:
+        exported = zf.read("slides/slide_01.svg").decode("utf-8")
+    assert "data:image/png;base64," in exported

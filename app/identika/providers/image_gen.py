@@ -44,7 +44,12 @@ async def generate_slide_images(
             result.warnings.append(
                 f"Slide {slide.index}: AI image fallback to programmatic SVG ({type(exc).__name__})"
             )
-    if failures == 0:
+    if failures == len(result.slides):
+        result.warnings.append(
+            "AI-изображения не сгенерированы: все запросы к OpenRouter image model завершились ошибкой. "
+            "Проверьте OPENROUTER_IMAGE_MODEL и баланс OpenRouter."
+        )
+    elif failures == 0:
         result.info.append("Slide backgrounds generated via OpenRouter image model.")
     elif failures < len(result.slides):
         result.info.append(

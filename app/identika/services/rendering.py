@@ -26,9 +26,14 @@ def image_to_data_uri(path: Path, media_type: str) -> str:
 def render_slide_svg(
     slide: SlideSpec,
     *,
+    source_image_href: str | None = None,
+    background_image_href: str | None = None,
     source_image_data_uri: str | None = None,
     background_image_data_uri: str | None = None,
 ) -> bytes:
+    # Backward-compatible aliases; prefer explicit href args (URL or data URI).
+    source_image_href = source_image_href or source_image_data_uri
+    background_image_href = background_image_href or background_image_data_uri
     bg = "#ffffff" if slide.role == "white_background" else "#f4f7fb"
     accent = "#2f6fed" if slide.role == "hero" else "#243b53"
     h = slide.height
@@ -37,7 +42,7 @@ def render_slide_svg(
     subtitle_lines = _wrap(slide.subtitle, 32)
     bullet_lines = slide.bullets[:5]
     y = 90
-    image_uri = background_image_data_uri or source_image_data_uri
+    image_href = background_image_href or source_image_href
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{w}" height="{h}" viewBox="0 0 {w} {h}">',
         f'<rect width="{w}" height="{h}" fill="{bg}"/>',
@@ -58,11 +63,16 @@ def render_slide_svg(
         )
         y += 42
     product_y = 520 if slide.role != "hero" else 570
-    if image_uri:
+    if image_href:
+        escaped_href = html.escape(image_href, quote=True)
         parts.extend(
             [
                 f'<rect x="150" y="{product_y}" width="600" height="360" rx="34" fill="#ffffff" stroke="#bcccdc" stroke-width="3"/>',
-                f'<image href="{html.escape(image_uri, quote=True)}" x="170" y="{product_y + 20}" width="560" height="320" preserveAspectRatio="xMidYMid meet"/>',
+                (
+                    f'<image href="{escaped_href}" xlink:href="{escaped_href}" '
+                    f'x="170" y="{product_y + 20}" width="560" height="320" '
+                    f'preserveAspectRatio="xMidYMid meet"/>'
+                ),
             ]
         )
     else:
