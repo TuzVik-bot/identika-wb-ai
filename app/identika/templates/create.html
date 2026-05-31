@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}Создать проект · Aidentika{% endblock %}
+
+{% block content %}
+<section class="create-workspace" aria-labelledby="create-title">
+  <aside class="create-sidebar">
+    <section class="step-card upload-card">
+      <div class="step-card__head">
+        <h1 id="create-title">Ваш товар</h1>
+        <span>01</span>
+      </div>
+      <form id="source-upload-form" class="upload-form" enctype="multipart/form-data">
+        <label class="drop-zone" for="source-images-input">
+          <input id="source-images-input" type="file" name="files" accept="image/*" multiple>
+          <span class="drop-zone__icon" aria-hidden="true">▧</span>
+          <strong>Перетащите фото сюда</strong>
+          <small>или выберите файл</small>
+        </label>
+        <div id="source-preview" class="source-preview" hidden aria-live="polite"></div>
+        <input type="hidden" id="source-image-asset-ids" name="source_image_asset_ids" value="">
+        <p id="upload-status" class="text-muted">До 4 фото товара с разных сторон</p>
+      </form>
+    </section>
+
+    <section class="step-card generation-card">
+      <div class="step-card__head">
+        <h2>Настройте генерацию</h2>
+        <span>02</span>
+      </div>
+
+      <div class="segmented" aria-label="Тип контента">
+        <button type="button" class="is-active">Фото</button>
+        <button type="button" disabled>Карточка</button>
+        <button type="button" disabled>Видео</button>
+      </div>
+      <p class="text-muted">Создавайте комплект WB-медиа из товара и пожеланий к сценарию.</p>
+
+      {% if wb_error %}
+      <p class="notice notice--error">{{ wb_error }}</p>
+      {% endif %}
+
+      <form class="filter-bar" method="get" action="{{ base_path }}/create">
+        <label class="field">Магазин
+          <select name="account_id" required>
+            <option value="">Выбрать магазин</option>
+            {% for account in accounts %}
+            <option value="{{ account.id }}" {% if selected_account_id and account.id|string == selected_account_id %}selected{% endif %}>
+              {{ account.name }} · {{ account.slug }}{% if not account.wb_configured %} · WB не настроен{% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="field">Как показать товар?
+          <input name="q" value="{{ q }}" placeholder="Название, артикул или категория">
+        </label>
+        <label class="field field--wide">Пожелания
+          <textarea name="brief" rows="4" maxlength="2000" placeholder="Например: мягкий свет, минимализм, нейтральный фон.">{{ brief }}</textarea>
+        </label>
+        <button type="submit" class="button button--dark">Получить товары с WB</button>
+      </form>
+
+      <details class="advanced-settings">
+        <summary>Расширенные настройки</summary>
+        <div class="advanced-settings__body">
+          <span>Стиль: marketplace-clean</span>
+          <span>Вывод: 10 слайдов + rich-пакет</span>
+        </div>
+      </details>
+
+      <form method="post" action="{{ base_path }}/demo" class="demo-action">
+        <button type="submit" class="button button--accent">Сгенерировать демо</button>
+      </form>
+    </section>
+  </aside>
+
+  <section class="results-stage" aria-labelledby="results-title">
+    <div class="results-stage__head">
+      <h2 id="results-title">Результаты</h2>
+      <span>03</span>
+    </div>
+
+    {% if selected_account_id and products %}
+    <div class="product-grid">
+      {% for product in products %}
+      <article class="product-card">
+        <div class="product-card__body">
+          <span class="status">WB</span>
+          <h3>{{ product.title or product.vendor_code or product.nm_id or product.sku_id }}</h3>
+          <p>SKU {{ product.sku_id }}{% if product.nm_id %} · nmID {{ product.nm_id }}{% endif %}{% if product.subject_name %} · {{ product.subject_name }}{% endif %}</p>
+        </div>
+        <form method="post" action="{{ base_path }}/wb/generate" class="wb-generate-form">
+          <input type="hidden" name="account_id" value="{{ selected_account_id }}">
+          <input type="hidden" name="sku_id" value="{{ product.sku_id }}">
+          <input type="hidden" name="brief" value="{{ brief }}">
+          <input type="hidden" name="source_image_asset_ids" class="source-image-ids-field" value="">
+          <button type="submit" class="button">Сгенерировать</button>
+        </form>
+      </article>
+      {% endfor %}
+    </div>
+    {% elif selected_account_id %}
+    <div class="empty-state empty-state--large">
+      <strong>По этому магазину товары не найдены.</strong>
+      <p>Проверь синхронизацию WB Tool или измени поиск.</p>
+    </div>
+    {% else %}
+    <div class="empty-state empty-state--large">
+      <strong>Здесь появятся результаты после генерации.</strong>
+      <p>Выбери магазин, найди товар или запусти демо-проект.</p>
+    </div>
+    {% endif %}
+  </section>
+</section>
+
+<section class="examples-section" aria-labelledby="examples-title">
+  <p class="eyebrow">Примеры</p>
+  <h2 id="examples-title">Подходит для разных категорий товаров</h2>
+  <p class="text-muted">Покажите нам товар — и получите чистую, продающую карточку.</p>
+
+  <div class="example-carousel" aria-label="Примеры готовых работ">
+    <article class="example-card example-card--fashion">
+      <div class="example-card__canvas">
+        <strong>Джинсы</strong>
+        <span>100% хлопковый деним</span>
+      </div>
+      <small>Категория товара</small>
+      <b>Одежда</b>
+    </article>
+    <article class="example-card example-card--jewelry">
+      <div class="example-card__canvas">
+        <strong>Серьги</strong>
+        <span>Кристаллы разных оттенков</span>
+      </div>
+      <small>Категория товара</small>
+      <b>Украшения</b>
+    </article>
+    <article class="example-card example-card--sport">
+      <div class="example-card__canvas">
+        <strong>Кроссовки</strong>
+        <span>Амортизация и сетчатый верх</span>
+      </div>
+      <small>Категория товара</small>
+      <b>Обувь</b>
+    </article>
+    <article class="example-card example-card--tea">
+      <div class="example-card__canvas">
+        <strong>Набор чая</strong>
+        <span>Натуральный состав</span>
+      </div>
+      <small>Категория товара</small>
+      <b>Чай и напитки</b>
+    </article>
+  </div>
+
+  <a class="button button--accent examples-cta" href="#create-title">Создать для своего товара →</a>
+</section>
+
+<section class="steps-section" aria-labelledby="steps-title">
+  <p class="eyebrow">Как это происходит</p>
+  <h2 id="steps-title">3 шага — и готово</h2>
+  <div class="process-grid">
+    <article class="process-step">
+      <div class="process-step__head"><span>01</span><h3>Загрузите фото товара</h3></div>
+      <p>Подойдёт обычная фотография со смартфона или товар из WB Tool.</p>
+      <div class="process-shot process-shot--source"><span>Исходник</span></div>
+    </article>
+    <article class="process-step">
+      <div class="process-step__head"><span>02</span><h3>Выберите концепцию</h3></div>
+      <p>Студия, интерьер, композиция и другие сценарии фиксируются в пожеланиях.</p>
+      <div class="process-shot process-shot--concept"><span>Для каталога</span></div>
+    </article>
+    <article class="process-step">
+      <div class="process-step__head"><span>03</span><h3>Добавьте инфографику</h3></div>
+      <p>Тексты, преимущества и характеристики превращаются в готовые слайды.</p>
+      <div class="process-shot process-shot--result"><span>Готовая карточка</span></div>
+    </article>
+  </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const input = document.getElementById('source-images-input');
+  const preview = document.getElementById('source-preview');
+  const idsField = document.getElementById('source-image-asset-ids');
+  const statusEl = document.getElementById('upload-status');
+  const generateFields = document.querySelectorAll('.source-image-ids-field');
+  const basePath = {{ base_path|tojson }};
+
+  async function uploadFiles(fileList) {
+    const files = Array.from(fileList || []).slice(0, 4);
+    if (!files.length) return;
+    preview.innerHTML = '';
+    preview.hidden = false;
+    statusEl.textContent = 'Загрузка фото...';
+    const formData = new FormData();
+    files.forEach((file) => formData.append('files', file));
+    files.forEach((file) => {
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(file);
+      img.alt = file.name;
+      preview.appendChild(img);
+    });
+    try {
+      const response = await fetch(`${basePath}/v1/uploads/source-images`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'upload failed');
+      const ids = (data.asset_ids || []).join(',');
+      idsField.value = ids;
+      generateFields.forEach((field) => { field.value = ids; });
+      statusEl.textContent = `Загружено ${data.asset_ids.length} фото`;
+    } catch (error) {
+      statusEl.textContent = `Ошибка загрузки: ${error.message}`;
+    }
+  }
+
+  input.addEventListener('change', () => uploadFiles(input.files));
+});
+</script>
+{% endblock %}

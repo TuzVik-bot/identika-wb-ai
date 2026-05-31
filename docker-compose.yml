@@ -1,0 +1,21 @@
+services:
+  identika:
+    build: .
+    env_file:
+      - .env
+    environment:
+      IDENTIKA_HOST: 0.0.0.0
+      IDENTIKA_PORT: 8787
+      IDENTIKA_DB_PATH: /data/identika.sqlite
+      IDENTIKA_ASSETS_DIR: /assets
+      WB_TOOL_BASE_URL: http://host.docker.internal:8765
+    ports:
+      - "8787:8787"
+    volumes:
+      - ./assets:/assets
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

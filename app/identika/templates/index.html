@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}Кабинет · Aidentika{% endblock %}
+
+{% block content %}
+<section class="profile-hero" aria-labelledby="dashboard-title">
+  <div class="profile-hero__avatar" aria-hidden="true">ai</div>
+  <div>
+    <p class="eyebrow">Локальный AI-сервис для WB</p>
+    <h1 id="dashboard-title">{{ account.name }}</h1>
+    <p class="text-muted">10 слайдов, rich-пакет, PDF-превью и ZIP-экспорт без передачи WB/B2B секретов.</p>
+  </div>
+</section>
+
+<section class="dashboard-grid">
+  <div class="main-column">
+    <section id="projects" class="surface-card project-hub" aria-labelledby="projects-title">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">01</p>
+          <h2 id="projects-title">Проекты</h2>
+        </div>
+        <a class="button button--ghost" href="{{ base_path }}/create">Создать проект</a>
+      </div>
+
+      <div class="project-actions">
+        <a class="project-create" href="{{ base_path }}/create">
+          <span class="project-create__icon" aria-hidden="true">+</span>
+          <span>
+            <strong>Создать проект</strong>
+            <small>WB-товар, brief или демо-генерация</small>
+          </span>
+          <span class="project-create__arrow" aria-hidden="true">›</span>
+        </a>
+        <a class="project-folder" href="{{ base_path }}/#projects">
+          <span aria-hidden="true">▣</span>
+          <span>
+            <strong>Все проекты</strong>
+            <small>Поиск, статусы и экспортные пакеты</small>
+          </span>
+        </a>
+      </div>
+
+      {% if recent_jobs %}
+      <div class="project-list" aria-label="Последние проекты">
+        {% for job in recent_jobs %}
+        <a class="project-item" href="{{ base_path }}/jobs/{{ job.id }}">
+          <span class="status status-{{ job.status }}">{{ job.status }}</span>
+          <span class="project-item__body">
+            <strong>{{ job.product_title }}</strong>
+            <small>store: {{ job.store_slug }}{% if job.nm_id %} · nmID {{ job.nm_id }}{% endif %}{% if job.sku_id %} · SKU {{ job.sku_id }}{% endif %}</small>
+          </span>
+          <span class="project-item__arrow" aria-hidden="true">›</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <strong>Пока нет проектов.</strong>
+        <p>Создай первый комплект через демо или WB Tool.</p>
+      </div>
+      {% endif %}
+    </section>
+  </div>
+
+  <aside class="side-column" aria-label="Сводка сервиса">
+    <div class="metric-grid">
+      <article class="metric-card metric-card--accent">
+        <span class="metric-card__mark" aria-hidden="true">✦</span>
+        <strong>{{ stats.generated_count }}</strong>
+        <span>Сгенерировано</span>
+        <small>Готовых комплектов</small>
+      </article>
+      <article class="metric-card metric-card--dark">
+        <span class="metric-card__mark" aria-hidden="true">✦</span>
+        <strong>{{ stats.total_jobs }}</strong>
+        <span>Проекты</span>
+        <small>Всего в кабинете</small>
+      </article>
+    </div>
+
+    <div class="quick-grid">
+      <a class="quick-card" href="{{ base_path }}/#projects">
+        <span aria-hidden="true">↺</span>
+        <strong>История</strong>
+      </a>
+      <a class="quick-card" href="{{ base_path }}/health">
+        <span aria-hidden="true">&lt;/&gt;</span>
+        <strong>Кабинет API</strong>
+      </a>
+      <a class="quick-card" href="{{ base_path }}/create">
+        <span aria-hidden="true">+</span>
+        <strong>Новый проект</strong>
+      </a>
+      <a class="quick-card" href="{{ base_path }}/#account-data">
+        <span aria-hidden="true">◎</span>
+        <strong>Аккаунт</strong>
+      </a>
+    </div>
+
+    <section id="account-data" class="surface-card account-card">
+      <div class="section-head section-head--compact">
+        <h2>Данные аккаунта</h2>
+      </div>
+      <dl class="account-list">
+        <div>
+          <dt>Код пользователя</dt>
+          <dd>{{ account.support_code }}</dd>
+        </div>
+        <div>
+          <dt>WB Tool</dt>
+          <dd>{{ integration_status }}</dd>
+        </div>
+        <div>
+          <dt>Approved</dt>
+          <dd>{{ stats.approved_count }}</dd>
+        </div>
+        <div>
+          <dt>ZIP exports</dt>
+          <dd>{{ stats.asset_count }}</dd>
+        </div>
+      </dl>
+      <p class="api-url">WB Tool URL: <code>{{ wb_tool_base_url }}</code></p>
+    </section>
+  </aside>
+</section>
+{% endblock %}

@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}{{ job.product_title }} · Aidentika{% endblock %}
+
+{% block content %}
+<section class="job-shell" aria-labelledby="job-title">
+  <header class="surface-card job-hero">
+    <div class="job-hero__copy">
+      <a href="{{ base_path }}/" class="back-link">← Все проекты</a>
+      <span class="status status-{{ job.status }}">{{ job.status }}</span>
+      <h1 id="job-title">{{ job.product_title }}</h1>
+      <p class="text-muted">store: {{ job.store_slug }}{% if job.nm_id %} · nmID {{ job.nm_id }}{% endif %}{% if job.sku_id %} · SKU {{ job.sku_id }}{% endif %}</p>
+    </div>
+
+    {% if job.result %}
+    <div class="job-actions">
+      {% if can_approve %}
+      <form method="post" action="{{ base_path }}/v1/generation/jobs/{{ job.id }}/approve">
+        <button type="submit" class="button button--accent">Approve</button>
+      </form>
+      {% endif %}
+      <a class="button button--dark" href="{{ base_path }}/v1/generation/jobs/{{ job.id }}/export">Export ZIP</a>
+      <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/upload-to-wb">
+        <button type="submit" class="button button--ghost" {% if not can_upload %}disabled title="Сначала approve"{% endif %}>Загрузить на WB</button>
+      </form>
+    </div>
+    {% endif %}
+  </header>
+
+  {% if job.error %}
+  <section class="surface-card notice notice--error">{{ job.error }}</section>
+  {% elif upload_status == 'ok' %}
+  <section class="surface-card notice notice--success">Пакет успешно отправлен в WB Tool.</section>
+  {% elif upload_status == 'error' %}
+  <section class="surface-card notice notice--error">Не удалось загрузить пакет в WB Tool. Проверьте, что сервис доступен.</section>
+  {% elif job.status in ['queued', 'running'] %}
+  <section class="surface-card notice" id="job-running-notice">
+    Генерация выполняется… статус: <strong>{{ job.status }}</strong>
+  </section>
+  {% elif job.result %}
+  <section class="job-summary" aria-label="Сводка проекта">
+    <article class="metric-card metric-card--accent">
+      <strong>{{ job.result.slides|length }}</strong>
+      <span>Слайдов</span>
+      <small>WB media pack</small>
+    </article>
+    <article class="metric-card">
+      <strong>{{ job.result.rich.blocks|length }}</strong>
+      <span>Rich-блоков</span>
+      <small>HTML + PDF preview</small>
+    </article>
+    <article class="metric-card metric-card--dark">
+      <strong>{% if job.result.export_asset_id %}ZIP{% else %}—{% endif %}</strong>
+      <span>Экспорт</span>
+      <small>manifest + ассеты</small>
+    </article>
+  </section>
+
+  <section class="job-layout job-layout--wide">
+    <section class="surface-card job-panel" aria-labelledby="slides-title">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Панель управления</p>
+          <h2 id="slides-title">Результаты генерации</h2>
+        </div>
+        <div class="job-tabs" aria-label="Разделы проекта">
+          <button type="button" class="tab-btn is-active" data-tab="slides">Слайды</button>
+          <button type="button" class="tab-btn" data-tab="rich">Rich-пакет</button>
+          <button type="button" class="tab-btn" data-tab="export">Экспорт и статус</button>
+        </div>
+      </div>
+
+      <!-- Panel: Slides -->
+      <div id="tab-slides" class="tab-panel is-active">
+        <div class="slide-grid">
+          {% for slide in job.result.slides %}
+          <article class="slide-tile">
+            <iframe src="{{ base_path }}/v1/assets/{{ slide.asset_id }}" title="slide {{ slide.index }}" loading="lazy"></iframe>
+            <div class="slide-tile__body">
+              <span class="role">{{ slide.role }}</span>
+              <h3>{{ slide.index }}. {{ slide.title }}</h3>
+              <p class="slide-subtitle">{{ slide.subtitle }}</p>
+              {% if slide.bullets %}
+              <ul class="slide-bullets">{% for bullet in slide.bullets %}<li>{{ bullet }}</li>{% endfor %}</ul>
+              {% endif %}
+              {% if can_edit %}
+              <details class="slide-edit-details">
+                <summary class="slide-edit-summary">
+                  <span class="edit-icon" aria-hidden="true">✎</span> Редактировать текст
+                </summary>
+                <form class="edit-form" method="post" action="{{ base_path }}/jobs/{{ job.id }}/slides/{{ slide.index }}/text">
+                  <div class="field">
+                    <label>Заголовок</label>
+                    <input name="title" value="{{ slide.title }}" required>
+                  </div>
+                  <div class="field">
+                    <label>Подзаголовок</label>
+                    <input name="subtitle" value="{{ slide.subtitle }}">
+                  </div>
+                  <div class="field">
+                    <label>Преимущества (каждое с новой строки)</label>
+                    <textarea name="bullets" rows="3">{% for bullet in slide.bullets %}{{ bullet }}
+{% endfor %}</textarea>
+                  </div>
+                  <button type="submit" class="button button--accent">Сохранить</button>
+                </form>
+              </details>
+              {% endif %}
+            </div>
+          </article>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Panel: Rich -->
+      <div id="tab-rich" class="tab-panel">
+        <div class="rich-workspace">
+          <div class="rich-info-card">
+            <h3>Интерактивный Rich-пакет</h3>
+            <p class="text-muted">Для карточки сгенерировано {{ job.result.rich.blocks|length }} rich-блоков, оптимизированных для мобильного и десктопного отображения на Wildberries.</p>
+            <div class="rich-actions-row">
+              {% if job.result.rich.html_asset_id %}
+              <a class="button button--accent" href="{{ base_path }}/v1/assets/{{ job.result.rich.html_asset_id }}" target="_blank">Открыть в новом окне ↗</a>
+              {% endif %}
+              {% if job.result.rich.pdf_asset_id %}
+              <a class="button button--ghost" href="{{ base_path }}/v1/assets/{{ job.result.rich.pdf_asset_id }}">Скачать PDF-превью</a>
+              {% endif %}
+            </div>
+          </div>
+          {% if job.result.rich.html_asset_id %}
+          <div class="rich-preview-frame-container">
+            <header class="frame-header">
+              <span class="dot red"></span>
+              <span class="dot yellow"></span>
+              <span class="dot green"></span>
+              <span class="frame-title">Rich-контент предпросмотр</span>
+            </header>
+            <iframe src="{{ base_path }}/v1/assets/{{ job.result.rich.html_asset_id }}" class="rich-iframe-preview" title="Rich HTML Preview"></iframe>
+          </div>
+          {% else %}
+          <div class="empty-state">Предпросмотр недоступен.</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Panel: Export -->
+      <div id="tab-export" class="tab-panel">
+        <div class="export-workspace">
+          <div class="export-columns">
+            <div class="export-main-actions">
+              <h3>Скачать и загрузить пакет</h3>
+              <p class="text-muted">Готовый комплект экспорта содержит `manifest.json`, SVG-слайды и Rich-блоки, упакованные в стандартный ZIP-архив.</p>
+              
+              <div class="export-buttons-stack">
+                <a class="button button--accent button--lg" href="{{ base_path }}/v1/generation/jobs/{{ job.id }}/export">
+                  <span>📥 Скачать ZIP-архив</span>
+                </a>
+                
+                <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/upload-to-wb">
+                  <button type="submit" class="button button--dark button--lg" {% if not can_upload %}disabled title="Сначала утвердите проект"{% endif %}>
+                    <span>🚀 Загрузить на Wildberries</span>
+                  </button>
+                  {% if not can_upload %}
+                  <p class="small text-muted" style="margin-top: 8px; text-align: center;">* Кнопка станет доступна после утверждения проекта (кнопка Approve сверху)</p>
+                  {% endif %}
+                </form>
+              </div>
+            </div>
+
+            <div class="export-details-side">
+              <div class="side-card-mini">
+                <h4>Предупреждения генерации</h4>
+                {% if job.result.warnings %}
+                <ul class="warnings-list">
+                  {% for warning in job.result.warnings %}
+                  <li>⚠️ {{ warning }}</li>
+                  {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-success">✓ Критичных предупреждений не обнаружено. Пакет готов к загрузке.</p>
+                {% endif %}
+              </div>
+
+              <div class="side-card-mini">
+                <h4>Содержимое пакета</h4>
+                <ul class="package-files-list">
+                  <li>📄 <code>manifest.json</code></li>
+                  <li>🖼️ 10 слайдов (SVG)</li>
+                  <li>📝 {{ job.result.rich.blocks|length }} Rich-блоков</li>
+                  <li>📊 <code>preview.html</code></li>
+                  <li>📕 <code>preview.pdf</code></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </section>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const tabs = document.querySelectorAll('.job-tabs .tab-btn');
+      const panels = document.querySelectorAll('.tab-panel');
+      
+      tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          const target = tab.dataset.tab;
+          
+          tabs.forEach(t => t.classList.remove('is-active'));
+          tab.classList.add('is-active');
+          
+          panels.forEach(panel => {
+            if (panel.id === `tab-${target}`) {
+              panel.classList.add('is-active');
+            } else {
+              panel.classList.remove('is-active');
+            }
+          });
+        });
+      });
+
+      {% if job.status in ['queued', 'running'] %}
+      const poll = () => {
+        fetch('{{ base_path }}/v1/generation/jobs/{{ job.id }}')
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.status === 'succeeded' || data.status === 'failed' || data.status === 'approved') {
+              window.location.reload();
+            }
+          })
+          .catch(() => {});
+      };
+      setInterval(poll, 3000);
+      {% endif %}
+    });
+  </script>
+  {% else %}
+  <section class="surface-card empty-state empty-state--large">Задача ещё не готова.</section>
+  {% endif %}
+</section>
+{% endblock %}

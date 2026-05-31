@@ -1,0 +1,35 @@
+[project]
+name = "identika-wb-ai"
+version = "0.1.0"
+description = "Локальный AI-сервис для генерации WB-слайдов и rich-пакетов."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "httpx>=0.27",
+    "jinja2>=3.1",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "python-multipart>=0.0.9",
+    "uvicorn[standard]>=0.30",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+identika = "identika.main:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["app"]
+testpaths = ["tests"]
+
+[tool.setuptools]
+package-dir = {"" = "app"}
+
+[tool.setuptools.packages.find]
+where = ["app"]
+include = ["identika*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

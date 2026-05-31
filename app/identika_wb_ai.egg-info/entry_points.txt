@@ -1,0 +1,2 @@
+[console_scripts]
+identika = identika.main:main

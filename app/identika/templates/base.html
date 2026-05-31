@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ page_title or "Aidentika" }} · Aidentika{% endblock %}</title>
+  <link rel="stylesheet" href="{{ base_path }}/static/app.css">
+</head>
+<body class="page page-{{ active_page or 'default' }}">
+  <header class="topbar">
+    <a class="topbar__brand" href="{{ base_path }}/" aria-label="Aidentika dashboard">Aidentika.com</a>
+    <nav class="topbar__nav" aria-label="Основная навигация">
+      <a class="topbar__link {% if active_page == 'create' %}is-active{% endif %}" href="{{ base_path }}/create">
+        <span aria-hidden="true">+</span>
+        <span>Создать проект</span>
+      </a>
+      <a class="topbar__link {% if active_page == 'dashboard' %}is-active{% endif %}" href="{{ base_path }}/#projects">
+        <span aria-hidden="true">▣</span>
+        <span>Все проекты</span>
+      </a>
+    </nav>
+    <div class="topbar__account" aria-label="Сводка аккаунта">
+      <span class="topbar__spark" aria-label="Сгенерировано проектов">
+        <span aria-hidden="true">+</span>
+        {% if stats is defined %}{{ stats.generated_count }}{% else %}AI{% endif %}
+      </span>
+      <span class="topbar__avatar" aria-hidden="true">ai</span>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="app-footer">
+    <a class="footer-brand" href="{{ base_path }}/"><span aria-hidden="true">✦</span> aidentika.com</a>
+    <span>© 2026 Айдентика</span>
+    <nav aria-label="Сервисные ссылки">
+      <a href="{{ base_path }}/health">API</a>
+      <a href="{{ base_path }}/create">Создать проект</a>
+      <a href="{{ base_path }}/#projects">Проекты</a>
+    </nav>
+  </footer>
+</body>
+</html>
