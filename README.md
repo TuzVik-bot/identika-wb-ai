@@ -28,14 +28,32 @@ Docker:
 docker compose up --build
 ```
 
-## Production (Render)
+## Production
 
 Репозиторий: `https://github.com/TuzVik-bot/identika-wb-ai`
+
+### VPS (текущий прод)
+
+- URL: `https://eurasia-transline.online/identika/` (nginx → `127.0.0.1:8787`, Basic Auth на уровне WB Tool).
+- Код на сервере: `/home/tbot/identika`, systemd: `identika.service`.
+- БД и ассеты: `/home/tbot/.identika/`, `/home/tbot/.identika/assets/` (см. `.env` на сервере).
+- Обязательно: `IDENTIKA_PUBLIC_BASE_PATH=/identika` в `/home/tbot/identika/.env`.
+
+Деплой с локальной машины:
+
+```bash
+export SSHPASS='<tbot password>'
+./scripts/deploy_vps.sh
+```
+
+Ручной рестарт на сервере: `sudo systemctl restart identika`.
+
+### Render (альтернатива)
 
 1. [Render Dashboard](https://dashboard.render.com) → **New** → **Blueprint** → подключить репозиторий.
 2. Используется `render.yaml` (Docker + диск `/data` для SQLite).
 3. В Render Environment задать `IDENTIKA_PROVIDER=mock` (или `openrouter` + `OPENROUTER_API_KEY`).
-4. После деплоя открыть URL сервиса; проверка: `GET /health`.
+4. После деплоя проверка: `GET /health`.
 
 Без OpenRouter-ключа при `IDENTIKA_PROVIDER=openrouter` сервис автоматически работает как `mock`.
 
