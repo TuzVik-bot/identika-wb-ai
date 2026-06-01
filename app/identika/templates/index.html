@@ -1,15 +1,19 @@
 {% extends "base.html" %}
 
-
 {% block content %}
-<section class="profile-hero" aria-labelledby="dashboard-title">
-  <div class="profile-hero__avatar" aria-hidden="true">ai</div>
-  <div>
-    <p class="eyebrow">Локальный AI-сервис для WB</p>
+<header class="cabinet-header" aria-labelledby="dashboard-title">
+  <div class="cabinet-header__main">
+    <p class="eyebrow">Кабинет WB · Identika</p>
     <h1 id="dashboard-title">{{ account.name }}</h1>
-    <p class="text-muted">10 слайдов, rich-пакет, PDF-превью и ZIP-экспорт без передачи WB/B2B секретов.</p>
+    <p class="cabinet-header__lede text-muted">
+      10 слайдов, rich-пакет, PDF-превью и ZIP-экспорт. Секреты WB, B2B и OpenRouter не сохраняются в истории.
+    </p>
   </div>
-</section>
+  <div class="cabinet-header__cta">
+    <a class="button button--primary" href="{{ base_path }}/create">Создать проект</a>
+    <a class="button button--ghost" href="{{ base_path }}/settings">Настройки</a>
+  </div>
+</header>
 
 <section class="dashboard-grid">
   <div class="main-column">
@@ -19,7 +23,7 @@
           <p class="eyebrow">01</p>
           <h2 id="projects-title">Проекты</h2>
         </div>
-        <a class="button button--ghost" href="{{ base_path }}/create">Создать проект</a>
+        <a class="button button--ghost" href="{{ base_path }}/create">Новый проект</a>
       </div>
 
       <div class="project-actions">
@@ -64,14 +68,14 @@
 
   <aside class="side-column" aria-label="Сводка сервиса">
     <div class="metric-grid">
-      <article class="metric-card metric-card--accent">
+      <article class="metric-card metric-card--highlight">
         <span class="metric-card__mark" aria-hidden="true">✦</span>
         <strong>{{ stats.generated_count }}</strong>
         <span>Сгенерировано</span>
         <small>Готовых комплектов</small>
       </article>
-      <article class="metric-card metric-card--dark">
-        <span class="metric-card__mark" aria-hidden="true">✦</span>
+      <article class="metric-card">
+        <span class="metric-card__mark" aria-hidden="true">▣</span>
         <strong>{{ stats.total_jobs }}</strong>
         <span>Проекты</span>
         <small>Всего в кабинете</small>

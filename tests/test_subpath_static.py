@@ -33,7 +33,7 @@ def test_static_css_served_at_root_and_subpath(subpath_client: TestClient) -> No
     prefixed = subpath_client.get("/identika/static/app.css")
     assert prefixed.status_code == 200
     assert "text/css" in prefixed.headers["content-type"]
-    assert ".profile-hero" in prefixed.text
+    assert ".cabinet-header" in prefixed.text
 
 
 def test_wb_tool_display_url_prefers_public_setting(tmp_path, monkeypatch) -> None:

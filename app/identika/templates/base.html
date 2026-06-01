@@ -35,11 +35,13 @@
       </a>
     </nav>
     <div class="topbar__account" aria-label="Сводка аккаунта">
-      <span class="topbar__spark" aria-label="Сгенерировано проектов">
-        <span aria-hidden="true">+</span>
-        {% if stats is defined %}{{ stats.generated_count }}{% else %}AI{% endif %}
+      {% if stats is defined %}
+      <span class="topbar__metric" aria-label="Сгенерировано комплектов">
+        <span class="topbar__metric-label">Готово</span>
+        <strong>{{ stats.generated_count }}</strong>
       </span>
-      <span class="topbar__avatar" aria-hidden="true">id</span>
+      {% endif %}
+      <span class="topbar__monogram" aria-hidden="true">iD</span>
     </div>
   </header>
 

@@ -49,6 +49,16 @@ def test_dashboard_has_settings_quick_card_not_api(client: TestClient) -> None:
     assert '/health">API<' not in home.text
 
 
+def test_dashboard_uses_editorial_cabinet_not_ai_hero(client: TestClient) -> None:
+    home = client.get("/")
+    assert home.status_code == 200
+    text = home.text
+    assert 'class="cabinet-header"' in text
+    assert "profile-hero__avatar" not in text
+    assert ">ai<" not in text
+    assert "metric-card--accent" not in text
+
+
 def test_settings_get_post_and_db_over_env(client: TestClient, tmp_path) -> None:
     page = client.get("/settings")
     assert page.status_code == 200
