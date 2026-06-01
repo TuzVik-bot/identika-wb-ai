@@ -183,6 +183,7 @@ async def download_product_images(
         product = ensure_product_image_urls(product)
     images = list(product.images)
     warnings: list[str] = []
+    failed_downloads = 0
     async with httpx.AsyncClient(
         timeout=30.0,
         follow_redirects=True,
@@ -191,6 +192,10 @@ async def download_product_images(
         if needs_cdn_fallback:
             product = await ensure_product_image_urls_async(product, client=client)
             images = list(product.images)
+            if not images:
+                warnings.append(
+                    f"CDN Wildberries недоступен для nmID {product.nm_id}: ни один photo endpoint не ответил изображением."
+                )
         for idx, image in enumerate(images):
             if image.asset_id or not image.url:
                 continue
@@ -209,12 +214,13 @@ async def download_product_images(
                 if downloaded:
                     break
             if not downloaded:
+                failed_downloads += 1
                 logger.warning(
                     "product image download failed",
                     extra={"url": image.url, "nm_id": product.nm_id},
                 )
                 if had_explicit_urls:
-                    warnings.append(f"Не удалось скачать фото товара ({image.url}).")
+                    warnings.append(f"Фото WB недоступно по URL: {image.url}")
                 continue
             data, content_type = downloaded
             suffix = ALLOWED_CONTENT_TYPES.get(content_type, ".jpg")
@@ -235,7 +241,7 @@ async def download_product_images(
     source_assets = [img for img in product.images if img.role == "source" and img.asset_id]
     if not source_assets and had_explicit_urls:
         warnings.append(
-            "Фото товара WB недоступны — слайды будут без исходного фото (проверьте URL или загрузите фото вручную)."
+            "Фото товара WB недоступны по переданным URL — слайды будут без исходного фото (проверьте URL или загрузите фото вручную)."
         )
     elif not source_assets and needs_cdn_fallback:
         warnings.append(
@@ -244,5 +250,10 @@ async def download_product_images(
     elif not source_assets:
         warnings.append(
             "В карточке WB нет фото — слайды будут без исходного фото (загрузите фото вручную или включите AI-фон)."
+        )
+    elif failed_downloads:
+        source_count = len(source_assets)
+        warnings.append(
+            f"Часть фото WB недоступна на CDN: успешно скачано {source_count}, пропущено {failed_downloads}."
         )
     return product, warnings

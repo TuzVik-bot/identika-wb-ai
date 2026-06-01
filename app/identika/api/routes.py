@@ -237,7 +237,9 @@ async def job_page(request: Request, job_id: str) -> HTMLResponse:
         raise HTTPException(status_code=404, detail="job not found") from None
     can_edit = bool(job.result and job.status != "approved")
     can_approve = bool(job.result and job.status != "approved")
-    can_upload = bool(job.result and job.status == "approved")
+    can_export = bool(job.result and job.result.export_asset_id)
+    can_rich_export = bool(job.result and job.result.rich.zip_asset_id)
+    can_upload = bool(job.result and job.status == "approved" and can_export)
     upload_status = request.query_params.get("upload", "")
     upload_detail = request.query_params.get("upload_detail", "")
     return apply_no_cache(
@@ -251,6 +253,8 @@ async def job_page(request: Request, job_id: str) -> HTMLResponse:
                 "page_title": job.product_title,
                 "can_edit": can_edit,
                 "can_approve": can_approve,
+                "can_export": can_export,
+                "can_rich_export": can_rich_export,
                 "can_upload": can_upload,
                 "upload_status": upload_status,
                 "upload_detail": upload_detail,
@@ -414,6 +418,24 @@ async def upload_job_to_wb(request: Request, job_id: str) -> RedirectResponse:
     return RedirectResponse(url=url(f"/jobs/{job_id}?{query}"), status_code=303)
 
 
+@router.post("/jobs/{job_id}/delete")
+async def delete_job_form(request: Request, job_id: str) -> RedirectResponse:
+    try:
+        service(request).delete_job(job_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="job not found") from None
+    return RedirectResponse(url=url("/"), status_code=303)
+
+
+@router.delete("/v1/generation/jobs/{job_id}")
+async def delete_generation_job(request: Request, job_id: str) -> JSONResponse:
+    try:
+        service(request).delete_job(job_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="job not found") from None
+    return JSONResponse(content={"ok": True, "job_id": job_id}, headers=NO_CACHE_HEADERS)
+
+
 @router.patch("/v1/generation/jobs/{job_id}/result/text")
 async def patch_generation_result_text(
     request: Request,
@@ -453,6 +475,50 @@ async def update_slide_text_form(
     return RedirectResponse(url=url(f"/jobs/{job_id}"), status_code=303)
 
 
+@router.post("/jobs/{job_id}/slides/{slide_index}/text/reset")
+async def reset_slide_text_form(request: Request, job_id: str, slide_index: int) -> RedirectResponse:
+    try:
+        service(request).reset_slide_text(job_id, slide_index)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="job not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(url=url(f"/jobs/{job_id}"), status_code=303)
+
+
+@router.post("/jobs/{job_id}/slides/{slide_index}/image/clear")
+async def clear_slide_image_form(request: Request, job_id: str, slide_index: int) -> RedirectResponse:
+    try:
+        service(request).clear_slide_image(job_id, slide_index)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="job not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(url=url(f"/jobs/{job_id}"), status_code=303)
+
+
+@router.delete("/v1/generation/jobs/{job_id}/slides/{slide_index}/text")
+async def reset_slide_text_api(request: Request, job_id: str, slide_index: int) -> JSONResponse:
+    try:
+        service(request).reset_slide_text(job_id, slide_index)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="job not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return JSONResponse(content={"ok": True, "job_id": job_id, "slide_index": slide_index}, headers=NO_CACHE_HEADERS)
+
+
+@router.delete("/v1/generation/jobs/{job_id}/slides/{slide_index}/image")
+async def clear_slide_image_api(request: Request, job_id: str, slide_index: int) -> JSONResponse:
+    try:
+        service(request).clear_slide_image(job_id, slide_index)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="job not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return JSONResponse(content={"ok": True, "job_id": job_id, "slide_index": slide_index}, headers=NO_CACHE_HEADERS)
+
+
 @router.get("/v1/generation/jobs/{job_id}/export")
 async def export_generation_job(request: Request, job_id: str) -> FileResponse:
     try:
@@ -463,6 +529,18 @@ async def export_generation_job(request: Request, job_id: str) -> FileResponse:
         raise HTTPException(status_code=409, detail=f"job is {job.status}")
     path, media_type = service(request).storage.get_asset(job.result.export_asset_id)
     return FileResponse(path, media_type=media_type, filename=f"identika_{job_id}.zip")
+
+
+@router.get("/v1/generation/jobs/{job_id}/rich-export")
+async def rich_export_generation_job(request: Request, job_id: str) -> FileResponse:
+    try:
+        job = service(request).get_job(job_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="job not found") from None
+    if not job.result or not job.result.rich.zip_asset_id:
+        raise HTTPException(status_code=409, detail=f"job is {job.status}")
+    path, media_type = service(request).storage.get_asset(job.result.rich.zip_asset_id)
+    return FileResponse(path, media_type=media_type, filename=f"identika_rich_{job_id}.zip")
 
 
 @router.get("/v1/assets/{asset_id}")

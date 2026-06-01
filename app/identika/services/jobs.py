@@ -9,6 +9,8 @@ from identika.models import (
     CreateJobRequest,
     GenerationResult,
     JobRecord,
+    QualityMode,
+    RichBlock,
     ResultTextPatch,
     SlideTextUpdate,
     TextBlock,
@@ -16,6 +18,7 @@ from identika.models import (
 from identika.providers.openrouter import get_provider
 from identika.services.product_images import download_product_images, prepare_job_request
 from identika.services.rendering import (
+    build_rich_zip,
     build_export_zip,
     image_to_data_uri,
     render_pdf_preview,
@@ -133,6 +136,8 @@ class JobService:
         *,
         embed: bool,
     ) -> tuple[str | None, str | None]:
+        if slide.image_cleared:
+            return None, None
         source_href = self._source_href_for_slide(slide, source_hrefs)
         background_href = self._asset_image_href(slide.background_asset_id, embed=embed)
         if slide.role == "white_background":
@@ -143,7 +148,47 @@ class JobService:
             return source_href, None
         return source_href, background_href
 
-    def _render_assets(self, job_id: str, result: GenerationResult) -> GenerationResult:
+    def _set_slide_text_blocks(self, slide) -> None:
+        slide.text_blocks = [block for block in slide.text_blocks if block.kind not in {"title", "subtitle"}]
+        slide.text_blocks.insert(0, TextBlock(kind="subtitle", text=slide.subtitle, y=0.24, size=28))
+        slide.text_blocks.insert(0, TextBlock(kind="title", text=slide.title))
+
+    def _default_slide_text(self, slide) -> tuple[str, str]:
+        if slide.index == 10:
+            return "Комплект поставки", "Что входит в набор"
+        if slide.role == "hero":
+            return "Ключевое преимущество", "Краткий оффер для первого экрана"
+        if slide.role == "description":
+            return "Преимущество товара", "Краткое описание пользы"
+        return f"Ракурс {slide.index}", "Фото для галереи"
+
+    def _validate_rich_content(self, result: GenerationResult) -> GenerationResult:
+        valid_blocks = [b for b in result.rich.blocks if b.title.strip() or b.text.strip()]
+        if len(valid_blocks) < 3:
+            rebuilt: list[RichBlock] = []
+            for slide in result.slides[:5]:
+                rebuilt.append(
+                    RichBlock(
+                        index=slide.index,
+                        title=slide.title or f"Слайд {slide.index}",
+                        text=slide.subtitle or "Контент подготовлен автоматически.",
+                    )
+                )
+            result.rich.blocks = rebuilt
+            result.warnings.append(
+                "Rich-контент частично деградировал: собран fallback-пакет из слайдов, проверьте блоки перед экспортом."
+            )
+        return result
+
+    def _render_assets(
+        self,
+        job_id: str,
+        result: GenerationResult,
+        *,
+        quality_mode: QualityMode = "preview",
+    ) -> GenerationResult:
+        result = self._validate_rich_content(result)
+        result.quality_mode = quality_mode
         source_hrefs_web = self._source_image_hrefs(result, embed=False)
         source_hrefs_export = self._source_image_hrefs(result, embed=True)
         asset_blobs: dict[str, bytes] = {}
@@ -219,8 +264,21 @@ class JobService:
         )
         asset_blobs[result.rich.html_asset_id] = rich_html
         export_blobs[result.rich.html_asset_id] = rich_html
-        export = build_export_zip(result, export_blobs)
+        rich_zip = build_rich_zip(result, export_blobs)
+        result.rich.zip_asset_id = self.storage.add_asset(job_id, "rich_export.zip", rich_zip, "application/zip")
+        asset_blobs[result.rich.zip_asset_id] = rich_zip
+        export_blobs[result.rich.zip_asset_id] = rich_zip
+        export = build_export_zip(result, export_blobs, quality_mode=quality_mode)
         result.export_asset_id = self.storage.add_asset(job_id, "export.zip", export, "application/zip")
+        result.info = [
+            item
+            for item in result.info
+            if "Режим качества:" not in item
+        ]
+        result.info.append(
+            "Режим качества: "
+            + ("preview (до approve)" if quality_mode == "preview" else "finalize WB export (после approve)")
+        )
         return result
 
     def update_slide_text(self, job_id: str, slide_index: int, update: SlideTextUpdate) -> JobRecord:
@@ -238,10 +296,8 @@ class JobService:
             slide.subtitle = update.subtitle.strip()
         if update.bullets is not None:
             slide.bullets = [item.strip() for item in update.bullets if item.strip()]
-        slide.text_blocks = [block for block in slide.text_blocks if block.kind not in {"title", "subtitle"}]
-        slide.text_blocks.insert(0, TextBlock(kind="subtitle", text=slide.subtitle, y=0.24, size=28))
-        slide.text_blocks.insert(0, TextBlock(kind="title", text=slide.title))
-        job.result = self._render_assets(job_id, job.result)
+        self._set_slide_text_blocks(slide)
+        job.result = self._render_assets(job_id, job.result, quality_mode="preview")
         self.storage.update_result(job_id, job.result)
         return self.storage.get_job(job_id)
 
@@ -262,11 +318,7 @@ class JobService:
                 slide.subtitle = slide_patch.subtitle.strip()
             if slide_patch.bullets is not None:
                 slide.bullets = [item.strip() for item in slide_patch.bullets if item.strip()]
-            slide.text_blocks = [
-                block for block in slide.text_blocks if block.kind not in {"title", "subtitle"}
-            ]
-            slide.text_blocks.insert(0, TextBlock(kind="subtitle", text=slide.subtitle, y=0.24, size=28))
-            slide.text_blocks.insert(0, TextBlock(kind="title", text=slide.title))
+            self._set_slide_text_blocks(slide)
 
         for block_patch in patch.rich_blocks:
             block = next((item for item in job.result.rich.blocks if item.index == block_patch.index), None)
@@ -277,7 +329,7 @@ class JobService:
             if block_patch.text is not None:
                 block.text = block_patch.text.strip()
 
-        job.result = self._render_assets(job_id, job.result)
+        job.result = self._render_assets(job_id, job.result, quality_mode="preview")
         self.storage.update_result(job_id, job.result)
         return self.storage.get_job(job_id)
 
@@ -288,6 +340,14 @@ class JobService:
         return self.storage.get_job(job_id)
 
     def approve(self, job_id: str) -> JobRecord:
+        job = self.storage.get_job(job_id)
+        if not job.result:
+            raise ValueError("job has no result")
+        if job.status not in ("succeeded", "approved"):
+            raise ValueError("approve is allowed only after successful generation")
+        if job.result.quality_mode != "final":
+            job.result = self._render_assets(job_id, job.result, quality_mode="final")
+            self.storage.update_result(job_id, job.result)
         return self.storage.approve(job_id)
 
     async def rerender_job(self, job_id: str) -> JobRecord:
@@ -306,6 +366,43 @@ class JobService:
                     if "фото" not in w.lower() and "cdn" not in w.lower()
                 ]
                 job.result.warnings = kept + image_warnings
-        job.result = self._render_assets(job_id, job.result)
+        quality_mode: QualityMode = "final" if job.status == "approved" else "preview"
+        job.result = self._render_assets(job_id, job.result, quality_mode=quality_mode)
         self.storage.update_result(job_id, job.result)
         return self.storage.get_job(job_id)
+
+    def reset_slide_text(self, job_id: str, slide_index: int) -> JobRecord:
+        job = self.storage.get_job(job_id)
+        if not job.result:
+            raise ValueError("job has no result")
+        if job.status == "approved":
+            raise ValueError("approved job cannot be edited")
+        slide = next((item for item in job.result.slides if item.index == slide_index), None)
+        if slide is None:
+            raise ValueError("slide not found")
+        title, subtitle = self._default_slide_text(slide)
+        slide.title = title
+        slide.subtitle = subtitle
+        slide.bullets = []
+        self._set_slide_text_blocks(slide)
+        job.result = self._render_assets(job_id, job.result, quality_mode="preview")
+        self.storage.update_result(job_id, job.result)
+        return self.storage.get_job(job_id)
+
+    def clear_slide_image(self, job_id: str, slide_index: int) -> JobRecord:
+        job = self.storage.get_job(job_id)
+        if not job.result:
+            raise ValueError("job has no result")
+        if job.status == "approved":
+            raise ValueError("approved job cannot be edited")
+        slide = next((item for item in job.result.slides if item.index == slide_index), None)
+        if slide is None:
+            raise ValueError("slide not found")
+        slide.image_cleared = True
+        slide.background_asset_id = None
+        job.result = self._render_assets(job_id, job.result, quality_mode="preview")
+        self.storage.update_result(job_id, job.result)
+        return self.storage.get_job(job_id)
+
+    def delete_job(self, job_id: str) -> None:
+        self.storage.delete_job(job_id)

@@ -9,6 +9,7 @@ SCHEMA_VERSION = "1.0"
 SLIDE_COUNT = 10
 
 SlideRole = Literal["hero", "description", "white_background"]
+QualityMode = Literal["preview", "final"]
 JobStatus = Literal["queued", "running", "succeeded", "failed", "approved"]
 
 
@@ -60,6 +61,7 @@ class SlideSpec(BaseModel):
     text_blocks: list[TextBlock] = Field(default_factory=list)
     asset_id: str | None = None
     background_asset_id: str | None = None
+    image_cleared: bool = False
     width: int = 900
     height: int = 1200
 
@@ -75,6 +77,7 @@ class RichPackage(BaseModel):
     cover_asset_id: str | None = None
     html_asset_id: str | None = None
     pdf_asset_id: str | None = None
+    zip_asset_id: str | None = None
     blocks: list[RichBlock] = Field(default_factory=list)
 
 
@@ -89,6 +92,7 @@ class GenerationResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     info: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    quality_mode: QualityMode = "preview"
     export_asset_id: str | None = None
 
 

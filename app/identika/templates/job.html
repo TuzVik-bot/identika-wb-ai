@@ -19,12 +19,19 @@
         <button type="submit" class="button button--accent">Approve</button>
       </form>
       {% endif %}
-      <a class="button button--dark" href="{{ base_path }}/v1/generation/jobs/{{ job.id }}/export">Export ZIP</a>
+      <a
+        class="button button--dark {% if not can_export %}is-disabled{% endif %}"
+        href="{% if can_export %}{{ base_path }}/v1/generation/jobs/{{ job.id }}/export{% else %}#{% endif %}"
+        {% if not can_export %}aria-disabled="true" tabindex="-1"{% endif %}
+      >Export ZIP</a>
       <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/re-render">
         <button type="submit" class="button button--ghost" title="Пересобрать SVG с встроенными фото">Пересобрать слайды</button>
       </form>
       <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/upload-to-wb">
         <button type="submit" class="button button--ghost" {% if not can_upload %}disabled title="Сначала approve"{% endif %}>Загрузить на WB</button>
+      </form>
+      <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/delete" onsubmit="return confirm('Удалить проект целиком? Это действие необратимо.');">
+        <button type="submit" class="button button--danger">Удалить проект</button>
       </form>
     </div>
     {% endif %}
@@ -123,6 +130,9 @@
             </div>
             <div class="slide-tile__body">
               <span class="role">{{ slide.role }}</span>
+              {% if slide.image_cleared %}
+              <span class="slide-flag">Картинка очищена</span>
+              {% endif %}
               <h3>{{ slide.index }}. {{ slide.title }}</h3>
               <p class="slide-subtitle">{{ slide.subtitle }}</p>
               {% if slide.bullets %}
@@ -150,6 +160,14 @@
                   <button type="submit" class="button button--accent">Сохранить</button>
                 </form>
               </details>
+              <div class="slide-quick-actions">
+                <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/slides/{{ slide.index }}/text/reset">
+                  <button type="submit" class="button button--ghost">Очистить текст</button>
+                </form>
+                <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/slides/{{ slide.index }}/image/clear">
+                  <button type="submit" class="button button--ghost">Очистить картинку</button>
+                </form>
+              </div>
               {% endif %}
             </div>
           </article>
@@ -166,9 +184,18 @@
             <div class="rich-actions-row">
               {% if job.result.rich.html_asset_id %}
               <a class="button button--accent" href="{{ base_path }}/v1/assets/{{ job.result.rich.html_asset_id }}" target="_blank">Открыть в новом окне ↗</a>
+              {% else %}
+              <span class="button button--accent is-disabled" aria-disabled="true">HTML ещё не готов</span>
               {% endif %}
               {% if job.result.rich.pdf_asset_id %}
               <a class="button button--ghost" href="{{ base_path }}/v1/assets/{{ job.result.rich.pdf_asset_id }}">Скачать PDF-превью</a>
+              {% else %}
+              <span class="button button--ghost is-disabled" aria-disabled="true">PDF недоступен</span>
+              {% endif %}
+              {% if can_rich_export %}
+              <a class="button button--dark" href="{{ base_path }}/v1/generation/jobs/{{ job.id }}/rich-export">Скачать Rich ZIP</a>
+              {% else %}
+              <span class="button button--dark is-disabled" aria-disabled="true">Rich ZIP недоступен</span>
               {% endif %}
             </div>
           </div>
@@ -185,6 +212,19 @@
           {% else %}
           <div class="empty-state">Предпросмотр недоступен.</div>
           {% endif %}
+          <div class="rich-visual-grid">
+            {% for block in job.result.rich.blocks %}
+            <article class="rich-visual-card">
+              <h4>{{ block.index }}. {{ block.title }}</h4>
+              <p class="text-muted">{{ block.text }}</p>
+              {% if block.asset_id %}
+              <iframe src="{{ base_path }}/v1/assets/{{ block.asset_id }}" title="rich block {{ block.index }}" loading="lazy" scrolling="no"></iframe>
+              {% else %}
+              <div class="empty-state">SVG блока недоступен</div>
+              {% endif %}
+            </article>
+            {% endfor %}
+          </div>
         </div>
       </div>
 
@@ -195,9 +235,14 @@
             <div class="export-main-actions">
               <h3>Скачать и загрузить пакет</h3>
               <p class="text-muted">Готовый комплект экспорта содержит `manifest.json`, SVG-слайды и Rich-блоки, упакованные в стандартный ZIP-архив.</p>
+              <p class="text-muted">Режим качества: <strong>{{ job.result.quality_mode }}</strong>{% if job.result.quality_mode == 'preview' %} (после approve автоматически запускается finalize-профиль){% endif %}</p>
               
               <div class="export-buttons-stack">
-                <a class="button button--accent button--lg" href="{{ base_path }}/v1/generation/jobs/{{ job.id }}/export">
+                <a
+                  class="button button--accent button--lg {% if not can_export %}is-disabled{% endif %}"
+                  href="{% if can_export %}{{ base_path }}/v1/generation/jobs/{{ job.id }}/export{% else %}#{% endif %}"
+                  {% if not can_export %}aria-disabled="true" tabindex="-1"{% endif %}
+                >
                   <span>📥 Скачать ZIP-архив</span>
                 </a>
 

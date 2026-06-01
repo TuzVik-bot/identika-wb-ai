@@ -37,6 +37,65 @@ def build_upload_payload(job: JobRecord, public_base_url: str = "") -> dict[str,
                     "url": f"{base}/v1/assets/{slide.asset_id}" if base else f"/v1/assets/{slide.asset_id}",
                 }
             )
+    rich_assets = []
+    for block in result.rich.blocks:
+        if block.asset_id:
+            rich_assets.append(
+                {
+                    "kind": "rich_block",
+                    "index": block.index,
+                    "asset_id": block.asset_id,
+                    "url": f"{base}/v1/assets/{block.asset_id}" if base else f"/v1/assets/{block.asset_id}",
+                }
+            )
+    if result.rich.cover_asset_id:
+        rich_assets.append(
+            {
+                "kind": "rich_cover",
+                "asset_id": result.rich.cover_asset_id,
+                "url": (
+                    f"{base}/v1/assets/{result.rich.cover_asset_id}"
+                    if base
+                    else f"/v1/assets/{result.rich.cover_asset_id}"
+                ),
+            }
+        )
+    if result.rich.html_asset_id:
+        rich_assets.append(
+            {
+                "kind": "rich_html",
+                "asset_id": result.rich.html_asset_id,
+                "url": (
+                    f"{base}/v1/assets/{result.rich.html_asset_id}"
+                    if base
+                    else f"/v1/assets/{result.rich.html_asset_id}"
+                ),
+            }
+        )
+    if result.rich.pdf_asset_id:
+        rich_assets.append(
+            {
+                "kind": "rich_pdf",
+                "asset_id": result.rich.pdf_asset_id,
+                "url": (
+                    f"{base}/v1/assets/{result.rich.pdf_asset_id}"
+                    if base
+                    else f"/v1/assets/{result.rich.pdf_asset_id}"
+                ),
+            }
+        )
+    if result.rich.zip_asset_id:
+        rich_assets.append(
+            {
+                "kind": "rich_zip",
+                "asset_id": result.rich.zip_asset_id,
+                "url": (
+                    f"{base}/v1/assets/{result.rich.zip_asset_id}"
+                    if base
+                    else f"/v1/assets/{result.rich.zip_asset_id}"
+                ),
+            }
+        )
     manifest = result.model_dump(mode="json")
     manifest.pop("export_asset_id", None)
     payload: dict[str, Any] = {
@@ -48,6 +107,7 @@ def build_upload_payload(job: JobRecord, public_base_url: str = "") -> dict[str,
         "store_slug": product.store_slug,
         "title": product.title,
         "assets": assets,
+        "rich_assets": rich_assets,
         "manifest": manifest,
         "slide_count": len(result.slides),
     }

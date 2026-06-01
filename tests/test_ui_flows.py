@@ -85,11 +85,15 @@ def test_redesigned_job_page_elements(client: TestClient) -> None:
     assert "slide-edit-details" in page_html
     assert "Редактировать текст" in page_html
     assert "✎" in page_html
+    assert "Очистить текст" in page_html
+    assert "Очистить картинку" in page_html
+    assert "Удалить проект" in page_html
 
     # E. Check for inline Rich preview workspace iframe
     assert "rich-workspace" in page_html
     assert "rich-iframe-preview" in page_html
     assert "Rich-контент предпросмотр" in page_html
+    assert "Скачать Rich ZIP" in page_html
 
     # F. Check for the Javascript tab switcher script
     assert "const tabs = document.querySelectorAll('.job-tabs .tab-btn')" in page_html

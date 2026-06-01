@@ -10,7 +10,12 @@ from identika.config import EffectiveSettings, settings
 from identika.models import CreateJobRequest, GenerationResult
 from identika.providers.base import AiProvider
 from identika.providers.mock import MockProvider
-from identika.providers.prompts import OPENROUTER_TEXT_SYSTEM_PROMPT, apply_visual_prompts
+from identika.providers.prompts import (
+    OPENROUTER_TEXT_SYSTEM_PROMPT,
+    WHITE_BG_ANGLE_SUBTITLES,
+    WHITE_BG_ANGLE_TITLES,
+    apply_visual_prompts,
+)
 
 
 class _SlideText(BaseModel):
@@ -145,6 +150,7 @@ class OpenRouterProvider(AiProvider):
                     block.text = slide.title
                 elif block.kind == "subtitle":
                     block.text = slide.subtitle
+        self._normalize_white_background_contract(result)
         rich_by_index = {block.index: block for block in plan.rich_blocks}
         for block in result.rich.blocks:
             incoming = rich_by_index.get(block.index)
@@ -157,6 +163,21 @@ class OpenRouterProvider(AiProvider):
                 clean = item.strip()
                 if clean:
                     result.info.append(f"Заметка ИИ: {clean}")
+
+    def _normalize_white_background_contract(self, result: GenerationResult) -> None:
+        for slide in result.slides:
+            if slide.role != "white_background" or slide.index < 6:
+                continue
+            angle_idx = slide.index - 6
+            if angle_idx >= len(WHITE_BG_ANGLE_TITLES):
+                continue
+            slide.title = WHITE_BG_ANGLE_TITLES[angle_idx]
+            slide.subtitle = WHITE_BG_ANGLE_SUBTITLES[angle_idx]
+            if slide.index < 10:
+                slide.bullets = []
+            elif not slide.bullets:
+                characteristics = list(result.product.characteristics.keys())[:4]
+                slide.bullets = characteristics or ["Основной товар", "Комплектующие", "Инструкция"]
 
 
 def get_provider(storage=None) -> AiProvider:

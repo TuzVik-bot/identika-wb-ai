@@ -163,6 +163,9 @@ def test_ui_smoke_pages_demo_redirect_edit_approve_export_and_assets(client: Tes
     assert export.status_code == 200
     assert export.headers["content-type"].startswith("application/zip")
     assert f"identika_{job_id}.zip" in export.headers["content-disposition"]
+    rich_export = client.get(f"/v1/generation/jobs/{job_id}/rich-export")
+    assert rich_export.status_code == 200
+    assert rich_export.headers["content-type"].startswith("application/zip")
 
     locked_edit = client.post(
         f"/jobs/{job_id}/slides/1/text",
@@ -184,3 +187,24 @@ def test_negative_404_and_409_responses(client: TestClient) -> None:
     upload = client.post(f"/jobs/{job_id}/upload-to-wb")
     assert upload.status_code == 409
     assert "after approve" in upload.json()["detail"]
+
+
+def test_delete_and_slide_reset_routes(client: TestClient) -> None:
+    demo = client.post("/demo")
+    job_id = _job_id_from_location(demo.headers["location"])
+
+    clear_text = client.post(f"/jobs/{job_id}/slides/1/text/reset")
+    assert clear_text.status_code == 303
+
+    clear_image = client.post(f"/jobs/{job_id}/slides/1/image/clear")
+    assert clear_image.status_code == 303
+
+    result = client.get(f"/v1/generation/jobs/{job_id}/result")
+    assert result.status_code == 200
+    payload = result.json()
+    assert payload["slides"][0]["image_cleared"] is True
+
+    delete_resp = client.post(f"/jobs/{job_id}/delete")
+    assert delete_resp.status_code == 303
+    assert delete_resp.headers["location"] == "/"
+    assert client.get(f"/v1/generation/jobs/{job_id}").status_code == 404

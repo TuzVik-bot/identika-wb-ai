@@ -10,12 +10,17 @@ NO_TEXT_IMAGE_RULE = (
     "the image must be purely visual."
 )
 
+KIT_CONTENTS_IMAGE_RULE = (
+    "For slide 10 (kit contents), schematic callout shapes/icons are allowed, "
+    "but still avoid any readable text in the generated image."
+)
+
 WHITE_BG_ANGLE_TITLES = (
     "Вид сверху",
     "Вид сбоку",
     "Вид снизу",
     "Деталь товара",
-    "Комплект",
+    "Комплект поставки",
 )
 
 WHITE_BG_ANGLE_SUBTITLES = (
@@ -23,7 +28,7 @@ WHITE_BG_ANGLE_SUBTITLES = (
     "Боковой ракурс на белом фоне",
     "Нижний ракурс на белом фоне",
     "Крупный план детали",
-    "Полный комплект на белом фоне",
+    "Инфографика состава комплекта",
 )
 
 
@@ -53,11 +58,12 @@ def build_visual_prompt(slide: SlideSpec, request: CreateJobRequest) -> str:
     # white_background — only used when no real product photos are available
     angle_idx = max(0, min(slide.index - 6, len(WHITE_BG_ANGLE_TITLES) - 1))
     angle = WHITE_BG_ANGLE_TITLES[angle_idx].lower()
+    extra_rule = KIT_CONTENTS_IMAGE_RULE if slide.index == 10 else NO_TEXT_IMAGE_RULE
     return (
         f"Professional e-commerce product photography on pure white background (#FFFFFF). "
         f"Product: {title}. {angle} angle, centered, studio lighting, no props, no shadows on background. "
-        "Single product only, marketplace catalog style. "
-        f"{NO_TEXT_IMAGE_RULE}"
+        "Single product only, marketplace catalog style. For kit slide use separate item grouping zones. "
+        f"{extra_rule}"
     )
 
 
@@ -67,10 +73,12 @@ def apply_visual_prompts(result: GenerationResult, request: CreateJobRequest) ->
         if slide.role == "white_background" and slide.index >= 6:
             angle_idx = slide.index - 6
             if angle_idx < len(WHITE_BG_ANGLE_TITLES):
-                if slide.title.endswith("на белом фоне") or "белом фоне" in slide.title.lower():
-                    slide.title = WHITE_BG_ANGLE_TITLES[angle_idx]
-                if not slide.subtitle or slide.subtitle == "Чистое товарное фото для галереи":
-                    slide.subtitle = WHITE_BG_ANGLE_SUBTITLES[angle_idx]
+                slide.title = WHITE_BG_ANGLE_TITLES[angle_idx]
+                slide.subtitle = WHITE_BG_ANGLE_SUBTITLES[angle_idx]
+                if slide.index < 10:
+                    slide.bullets = []
+                elif not slide.bullets:
+                    slide.bullets = ["Основной товар", "Аксессуары", "Документация"]
 
 
 def build_image_model_user_prompt(
@@ -105,6 +113,11 @@ def build_image_model_user_prompt(
             "Role: WHITE BACKGROUND product photo. Pure white (#FFFFFF) background, "
             "professional catalog photography, product centered, no props, no text."
         )
+        if slide.index == 10:
+            role_hint = (
+                "Role: KIT CONTENTS infographic base image. White background, grouped product set, "
+                "clean composition zones for later SVG callouts. Avoid readable text."
+            )
 
     ref_hint = (
         "The attached reference photo is the exact product — match its shape, color, "
@@ -135,8 +148,9 @@ OPENROUTER_TEXT_SYSTEM_PROMPT = (
     "слайды 6–10 — белый фон (white_background), только фото без маркетингового текста. "
     "Русский текст: короткий, честный, единый тон, без недоказуемых обещаний. "
     "Заголовок до 50 символов, подзаголовок до 70, bullets — максимум 3 коротких пункта на description-слайдах. "
-    "На слайдах 6–10: title = ракурс фото (Вид сверху, Вид сбоку, Вид снизу, Деталь товара, Комплект), "
+    "На слайдах 6–9: title = ракурс фото (Вид сверху, Вид сбоку, Вид снизу, Деталь товара), "
     "subtitle = кратко про ракурс, bullets = пустой массив []. "
+    "Слайд 10 строго: title = 'Комплект поставки', subtitle про состав комплекта, bullets 2-4 коротких элемента комплекта. "
     "Поле warnings — только служебные замечания для оператора, не копируй их в title/subtitle/bullets. "
     "Схема: {slides:[{index,title,subtitle,bullets}], rich_blocks:[{index,title,text}], warnings:[string]}."
 )

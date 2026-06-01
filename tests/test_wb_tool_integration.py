@@ -50,6 +50,8 @@ def test_build_upload_payload_includes_manifest_and_urls(tmp_path) -> None:
     assert payload["contract_version"] == "1.0"
     assert payload["nm_id"] == 2002
     assert payload["manifest"]["slides"]
+    assert payload["rich_assets"]
+    assert any(item["kind"] == "rich_block" for item in payload["rich_assets"])
     assert payload["export_url"].startswith("https://example.com/identika")
     assert payload["manifest_url"].endswith("/result")
 

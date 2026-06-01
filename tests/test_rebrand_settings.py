@@ -114,7 +114,7 @@ def test_mock_warnings_separate_from_info(client: TestClient) -> None:
     job_id = demo.headers["location"].split("/")[-1]
     result = client.get(f"/v1/generation/jobs/{job_id}/result").json()
     assert any("Mock" in item for item in result["warnings"])
-    assert result["info"] == []
+    assert any("Режим качества: preview" in item for item in result["info"])
 
 
 def test_download_product_images_stores_local_assets(tmp_path, monkeypatch) -> None:

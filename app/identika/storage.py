@@ -154,6 +154,37 @@ class Storage:
             raise KeyError(job_id)
         return self._row_to_job(row)
 
+    def delete_job(self, job_id: str) -> None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT id FROM jobs WHERE id=?", (job_id,)).fetchone()
+            if row is None:
+                raise KeyError(job_id)
+            asset_rows = conn.execute(
+                "SELECT path FROM assets WHERE job_id=? OR job_id LIKE ?",
+                (job_id, f"{job_id}/%"),
+            ).fetchall()
+            conn.execute("DELETE FROM assets WHERE job_id=? OR job_id LIKE ?", (job_id, f"{job_id}/%"))
+            conn.execute("DELETE FROM jobs WHERE id=?", (job_id,))
+        for asset_row in asset_rows:
+            path = Path(asset_row["path"])
+            try:
+                resolved = path.resolve()
+            except OSError:
+                continue
+            if self.assets_dir.resolve() not in resolved.parents:
+                continue
+            try:
+                resolved.unlink(missing_ok=True)
+            except OSError:
+                continue
+        job_dir = (self.assets_dir / job_id).resolve()
+        if self.assets_dir.resolve() in job_dir.parents:
+            for item in sorted(job_dir.glob("*"), reverse=True):
+                if item.is_file():
+                    item.unlink(missing_ok=True)
+            if job_dir.exists() and not any(job_dir.iterdir()):
+                job_dir.rmdir()
+
     _ASSET_SUFFIXES = {
         ".svg",
         ".pdf",

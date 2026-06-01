@@ -139,6 +139,9 @@ def test_approve_only_after_success(tmp_path) -> None:
 
     assert approved.status == "approved"
     assert approved.approved_at is not None
+    assert approved.result is not None
+    assert approved.result.quality_mode == "final"
+    assert approved.result.rich.zip_asset_id
 
 
 def test_result_does_not_include_known_secret_fields(tmp_path) -> None:
@@ -151,6 +154,18 @@ def test_result_does_not_include_known_secret_fields(tmp_path) -> None:
     assert "wb_api_token" not in dumped
     assert "b2b_client_secret" not in dumped
     assert "OPENROUTER_API_KEY" not in dumped
+
+
+def test_clear_slide_image_sets_flag_and_renders_placeholder(tmp_path) -> None:
+    storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
+    service = JobService(storage)
+    job = asyncio.run(service.create_job(CreateJobRequest(product=product())))
+    updated = service.clear_slide_image(job.id, 1)
+    assert updated.result is not None
+    slide = updated.result.slides[0]
+    assert slide.image_cleared is True
+    slide_path, _ = storage.get_asset(slide.asset_id)
+    assert "ТОВАР" in slide_path.read_text(encoding="utf-8")
 
 
 def test_patch_result_text_updates_manifest_export(tmp_path) -> None:

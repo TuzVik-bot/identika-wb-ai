@@ -8,7 +8,7 @@ import textwrap
 import zipfile
 from pathlib import Path
 
-from identika.models import GenerationResult, SlideSpec
+from identika.models import GenerationResult, QualityMode, SlideSpec
 
 
 def _wrap(text: str, width: int) -> list[str]:
@@ -134,6 +134,37 @@ def _render_white_background(slide: SlideSpec, source_href: str) -> bytes:
     return "\n".join(parts).encode("utf-8")
 
 
+def _render_kit_contents_infographic(slide: SlideSpec, source_href: str) -> bytes:
+    w, h = slide.width, slide.height
+    bullets = [item for item in slide.bullets if item.strip()][:4]
+    if not bullets:
+        bullets = ["Основной товар", "Аксессуары", "Инструкция", "Упаковка"]
+    parts = [
+        _svg_open(w, h),
+        f'<rect width="{w}" height="{h}" fill="#ffffff"/>',
+        f'<rect x="36" y="36" width="{w-72}" height="{h-72}" rx="22" fill="none" stroke="#d8e2ef" stroke-width="3"/>',
+        '<text x="70" y="108" font-family="Arial, DejaVu Sans, sans-serif" font-size="48" '
+        'font-weight="700" fill="#1e293b">Комплект поставки</text>',
+        f'<rect x="70" y="150" width="{w-140}" height="2" fill="#dbeafe"/>',
+        _image_tag(source_href, 70, 190, 380, 500, fit="meet"),
+        '<rect x="480" y="190" width="350" height="500" rx="28" fill="#f8fafc" stroke="#e2e8f0" stroke-width="2"/>',
+    ]
+    y = 250
+    for idx, bullet in enumerate(bullets, start=1):
+        parts.append(
+            f'<circle cx="520" cy="{y-10}" r="14" fill="#2563eb"/>'
+            f'<text x="520" y="{y-4}" text-anchor="middle" font-family="Arial, DejaVu Sans, sans-serif" '
+            f'font-size="16" font-weight="700" fill="#ffffff">{idx}</text>'
+        )
+        parts.append(
+            f'<text x="550" y="{y}" font-family="Arial, DejaVu Sans, sans-serif" '
+            f'font-size="26" fill="#0f172a">{html.escape(bullet)}</text>'
+        )
+        y += 88
+    parts.append("</svg>")
+    return "\n".join(parts).encode("utf-8")
+
+
 def _render_product_composite(slide: SlideSpec, source_href: str) -> bytes:
     w, h = slide.width, slide.height
     bg = "#f4f7fb"
@@ -187,12 +218,17 @@ def render_slide_svg(
     source_image_data_uri: str | None = None,
     background_image_data_uri: str | None = None,
 ) -> bytes:
+    if slide.image_cleared:
+        return _render_placeholder(slide)
+
     source_image_href = source_image_href or source_image_data_uri
     background_image_href = background_image_href or background_image_data_uri
 
     if slide.role == "white_background":
         product_href = source_image_href or background_image_href
         if product_href:
+            if slide.index == 10:
+                return _render_kit_contents_infographic(slide, product_href)
             return _render_white_background(slide, product_href)
         return _render_placeholder(slide)
 
@@ -246,8 +282,16 @@ def render_pdf_preview(result: GenerationResult) -> bytes:
 def render_rich_html_preview(result: GenerationResult) -> bytes:
     blocks = []
     for block in result.rich.blocks:
+        visual = ""
+        if block.asset_id:
+            visual = (
+                "<figure class='rich-block__visual'>"
+                f"<img src='/v1/assets/{block.asset_id}' alt='Rich block {block.index}' loading='lazy'/>"
+                "</figure>"
+            )
         blocks.append(
             "<section class='rich-block'>"
+            f"{visual}"
             f"<h2>{html.escape(block.title)}</h2>"
             f"<p>{html.escape(block.text)}</p>"
             "</section>"
@@ -264,7 +308,9 @@ def render_rich_html_preview(result: GenerationResult) -> bytes:
     header {{ border-bottom: 1px solid #d9e2ec; padding-bottom: 18px; margin-bottom: 18px; }}
     h1 {{ font-size: 30px; margin: 0 0 8px; }}
     .meta {{ color: #627d98; }}
-    .rich-block {{ border: 1px solid #d9e2ec; border-radius: 8px; padding: 18px; margin: 14px 0; }}
+    .rich-block {{ border: 1px solid #d9e2ec; border-radius: 8px; padding: 18px; margin: 14px 0; background:#fff; }}
+    .rich-block__visual {{ margin: 0 0 12px; border:1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }}
+    .rich-block__visual img {{ display:block; width:100%; height:auto; background:#fff; }}
     .rich-block h2 {{ margin: 0 0 8px; color: #2f6fed; font-size: 22px; }}
     .rich-block p {{ margin: 0; line-height: 1.55; white-space: pre-wrap; }}
   </style>
@@ -282,15 +328,53 @@ def render_rich_html_preview(result: GenerationResult) -> bytes:
     return doc.encode("utf-8")
 
 
-def build_export_zip(result: GenerationResult, asset_blobs: dict[str, bytes]) -> bytes:
+def build_rich_zip(result: GenerationResult, asset_blobs: dict[str, bytes]) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        if result.rich.html_asset_id and result.rich.html_asset_id in asset_blobs:
+            zf.writestr("rich/preview.html", asset_blobs[result.rich.html_asset_id])
+        if result.rich.pdf_asset_id and result.rich.pdf_asset_id in asset_blobs:
+            zf.writestr("rich/preview.pdf", asset_blobs[result.rich.pdf_asset_id])
+        if result.rich.cover_asset_id and result.rich.cover_asset_id in asset_blobs:
+            zf.writestr("rich/cover.svg", asset_blobs[result.rich.cover_asset_id])
+        for block in result.rich.blocks:
+            if block.asset_id and block.asset_id in asset_blobs:
+                zf.writestr(f"rich/block_{block.index:02d}.svg", asset_blobs[block.asset_id])
+    return buf.getvalue()
+
+
+def build_export_zip(
+    result: GenerationResult,
+    asset_blobs: dict[str, bytes],
+    *,
+    quality_mode: QualityMode = "preview",
+) -> bytes:
     buf = io.BytesIO()
     manifest = result.model_dump(mode="json")
     manifest.pop("export_asset_id", None)
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        zf.writestr(
+            "export_profile.json",
+            json.dumps(
+                {
+                    "quality_mode": quality_mode,
+                    "target": "wildberries",
+                    "note": (
+                        "preview mode before approve"
+                        if quality_mode == "preview"
+                        else "finalized export profile after approve"
+                    ),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+        )
         for slide in result.slides:
             if slide.asset_id and slide.asset_id in asset_blobs:
                 zf.writestr(f"slides/slide_{slide.index:02d}.svg", asset_blobs[slide.asset_id])
+                if quality_mode == "final":
+                    zf.writestr(f"slides_hq/slide_{slide.index:02d}.svg", asset_blobs[slide.asset_id])
         for block in result.rich.blocks:
             if block.asset_id and block.asset_id in asset_blobs:
                 zf.writestr(f"rich/block_{block.index:02d}.svg", asset_blobs[block.asset_id])

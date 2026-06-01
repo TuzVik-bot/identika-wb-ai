@@ -42,10 +42,14 @@ def wb_image_url_candidates(nm_id: int, index: int = 1) -> list[str]:
     vol = nm_id // 100_000
     part = nm_id // 1_000
     basket = wb_basket_id(vol)
-    hosts = (f"basket-{basket}.wbbasket.ru", f"basket-{basket}.wb.ru")
+    hosts = (
+        f"basket-{basket}.wbbasket.ru",
+        f"basket-{basket}.wb.ru",
+        f"basket-{basket}.wbstatic.net",
+    )
     urls: list[str] = []
     for host in hosts:
-        for ext in ("webp", "jpg"):
+        for ext in ("webp", "jpg", "jpeg"):
             urls.append(f"https://{host}/vol{vol}/part{part}/{nm_id}/images/big/{index}.{ext}")
     return urls
 
