@@ -328,11 +328,24 @@ def render_rich_html_preview(result: GenerationResult) -> bytes:
     return doc.encode("utf-8")
 
 
+def _make_portable_rich_html(html_bytes: bytes, result: GenerationResult) -> bytes:
+    """Rewrite server-relative /v1/assets/{id} URLs to ./block_NN.svg relative paths for ZIP portability."""
+    text = html_bytes.decode("utf-8")
+    for block in result.rich.blocks:
+        if block.asset_id:
+            text = text.replace(
+                f"/v1/assets/{block.asset_id}",
+                f"./block_{block.index:02d}.svg",
+            )
+    return text.encode("utf-8")
+
+
 def build_rich_zip(result: GenerationResult, asset_blobs: dict[str, bytes]) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         if result.rich.html_asset_id and result.rich.html_asset_id in asset_blobs:
-            zf.writestr("rich/preview.html", asset_blobs[result.rich.html_asset_id])
+            portable_html = _make_portable_rich_html(asset_blobs[result.rich.html_asset_id], result)
+            zf.writestr("rich/preview.html", portable_html)
         if result.rich.pdf_asset_id and result.rich.pdf_asset_id in asset_blobs:
             zf.writestr("rich/preview.pdf", asset_blobs[result.rich.pdf_asset_id])
         if result.rich.cover_asset_id and result.rich.cover_asset_id in asset_blobs:

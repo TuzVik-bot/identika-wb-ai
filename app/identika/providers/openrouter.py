@@ -175,9 +175,33 @@ class OpenRouterProvider(AiProvider):
             slide.subtitle = WHITE_BG_ANGLE_SUBTITLES[angle_idx]
             if slide.index < 10:
                 slide.bullets = []
-            elif not slide.bullets:
-                characteristics = list(result.product.characteristics.keys())[:4]
-                slide.bullets = characteristics or ["Основной товар", "Комплектующие", "Инструкция"]
+            else:
+                slide.bullets = self._normalize_kit_bullets(result, slide.bullets)
+            for block in slide.text_blocks:
+                if block.kind == "title":
+                    block.text = slide.title
+                elif block.kind == "subtitle":
+                    block.text = slide.subtitle
+
+    def _normalize_kit_bullets(
+        self,
+        result: GenerationResult,
+        bullets: list[str],
+    ) -> list[str]:
+        normalized = [item.strip() for item in bullets if item.strip()][:4]
+        fallback_pool = [
+            *[str(key).strip() for key in result.product.characteristics.keys() if str(key).strip()],
+            "Основной товар",
+            "Комплектующие",
+            "Инструкция",
+            "Упаковка",
+        ]
+        for item in fallback_pool:
+            if len(normalized) >= 2:
+                break
+            if item and item not in normalized:
+                normalized.append(item)
+        return normalized[:4]
 
 
 def get_provider(storage=None) -> AiProvider:

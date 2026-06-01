@@ -87,7 +87,9 @@ def test_redesigned_job_page_elements(client: TestClient) -> None:
     assert "✎" in page_html
     assert "Очистить текст" in page_html
     assert "Очистить картинку" in page_html
+    assert "button--danger-outline" in page_html
     assert "Удалить проект" in page_html
+    assert 'class="button button--danger"' in page_html
 
     # E. Check for inline Rich preview workspace iframe
     assert "rich-workspace" in page_html

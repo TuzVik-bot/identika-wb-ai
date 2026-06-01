@@ -24,6 +24,11 @@
         href="{% if can_export %}{{ base_path }}/v1/generation/jobs/{{ job.id }}/export{% else %}#{% endif %}"
         {% if not can_export %}aria-disabled="true" tabindex="-1"{% endif %}
       >Export ZIP</a>
+      <a
+        class="button button--dark {% if not can_rich_export %}is-disabled{% endif %}"
+        href="{% if can_rich_export %}{{ base_path }}/v1/generation/jobs/{{ job.id }}/rich-export{% else %}#{% endif %}"
+        {% if not can_rich_export %}aria-disabled="true" tabindex="-1"{% endif %}
+      >Rich ZIP</a>
       <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/re-render">
         <button type="submit" class="button button--ghost" title="Пересобрать SVG с встроенными фото">Пересобрать слайды</button>
       </form>
@@ -161,11 +166,11 @@
                 </form>
               </details>
               <div class="slide-quick-actions">
-                <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/slides/{{ slide.index }}/text/reset">
-                  <button type="submit" class="button button--ghost">Очистить текст</button>
+                <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/slides/{{ slide.index }}/text/reset" onsubmit="return confirm('Очистить текст слайда {{ slide.index }}?');">
+                  <button type="submit" class="button button--danger-outline">Очистить текст</button>
                 </form>
-                <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/slides/{{ slide.index }}/image/clear">
-                  <button type="submit" class="button button--ghost">Очистить картинку</button>
+                <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/slides/{{ slide.index }}/image/clear" onsubmit="return confirm('Очистить картинку слайда {{ slide.index }}?');">
+                  <button type="submit" class="button button--danger-outline">Очистить картинку</button>
                 </form>
               </div>
               {% endif %}
@@ -246,6 +251,14 @@
                   <span>📥 Скачать ZIP-архив</span>
                 </a>
 
+                <a
+                  class="button button--dark button--lg {% if not can_rich_export %}is-disabled{% endif %}"
+                  href="{% if can_rich_export %}{{ base_path }}/v1/generation/jobs/{{ job.id }}/rich-export{% else %}#{% endif %}"
+                  {% if not can_rich_export %}aria-disabled="true" tabindex="-1"{% endif %}
+                >
+                  <span>📦 Скачать Rich ZIP</span>
+                </a>
+
                 <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/re-render">
                   <button type="submit" class="button button--ghost button--lg" title="Пересобрать SVG с актуальными фото">
                     ↻ Пересобрать слайды
@@ -296,6 +309,7 @@
                   <li>📝 {{ job.result.rich.blocks|length }} Rich-блоков</li>
                   <li>📊 <code>preview.html</code></li>
                   <li>📕 <code>preview.pdf</code></li>
+                  <li>📦 <code>rich_export.zip</code></li>
                 </ul>
               </div>
             </div>

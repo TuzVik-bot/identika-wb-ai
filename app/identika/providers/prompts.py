@@ -58,7 +58,11 @@ def build_visual_prompt(slide: SlideSpec, request: CreateJobRequest) -> str:
     # white_background — only used when no real product photos are available
     angle_idx = max(0, min(slide.index - 6, len(WHITE_BG_ANGLE_TITLES) - 1))
     angle = WHITE_BG_ANGLE_TITLES[angle_idx].lower()
-    extra_rule = KIT_CONTENTS_IMAGE_RULE if slide.index == 10 else NO_TEXT_IMAGE_RULE
+    extra_rule = (
+        f"{NO_TEXT_IMAGE_RULE} {KIT_CONTENTS_IMAGE_RULE}"
+        if slide.index == 10
+        else NO_TEXT_IMAGE_RULE
+    )
     return (
         f"Professional e-commerce product photography on pure white background (#FFFFFF). "
         f"Product: {title}. {angle} angle, centered, studio lighting, no props, no shadows on background. "

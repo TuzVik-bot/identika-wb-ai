@@ -64,6 +64,46 @@ def test_render_slide_svg_white_background_centers_product() -> None:
     assert 'fill="#ffffff"' in svg
 
 
+def test_render_slide_svg_kit_contents_infographic_uses_callout_layout() -> None:
+    from identika.models import SlideSpec
+    from identika.services.rendering import render_slide_svg
+
+    slide = SlideSpec(
+        index=10,
+        role="white_background",
+        title="Комплект поставки",
+        subtitle="Инфографика состава комплекта",
+        bullets=["Товар", "Кабель", "Упаковка", "Инструкция", "Гарантия"],
+    )
+    svg = render_slide_svg(
+        slide,
+        source_image_href="/identika/v1/assets/product.png",
+    ).decode("utf-8")
+    assert "Комплект поставки" in svg
+    assert '<image href="/identika/v1/assets/product.png"' in svg
+    assert 'x="70" y="190" width="380" height="500"' in svg
+    assert 'x="80" y="120" width="740" height="960"' not in svg
+    assert "Товар" in svg
+    assert "Инструкция" in svg
+    assert "Гарантия" not in svg
+
+
+def test_slide_10_visual_prompt_keeps_no_text_rule_and_callout_hint() -> None:
+    from identika.models import SlideSpec
+    from identika.providers.prompts import build_visual_prompt
+
+    slide = SlideSpec(
+        index=10,
+        role="white_background",
+        title="Комплект поставки",
+        subtitle="Инфографика состава комплекта",
+    )
+    prompt = build_visual_prompt(slide, CreateJobRequest(product=product()))
+    assert "STRICT: absolutely NO text" in prompt
+    assert "schematic callout shapes/icons are allowed" in prompt
+    assert "separate item grouping zones" in prompt
+
+
 def test_render_slide_svg_has_wb_dimensions() -> None:
     from identika.models import SlideSpec
     from identika.services.rendering import render_slide_svg
@@ -128,6 +168,27 @@ def test_job_service_exports_assets_pdf_manifest_and_zip(tmp_path) -> None:
         assert "rich/preview.html" in names
         assert "slides/slide_01.svg" in names
         assert "slides/slide_10.svg" in names
+
+
+def test_rich_zip_html_uses_relative_paths_not_server_urls(tmp_path) -> None:
+    storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
+    service = JobService(storage)
+
+    job = asyncio.run(service.create_job(CreateJobRequest(product=product())))
+
+    assert job.result is not None
+    assert job.result.rich.zip_asset_id
+
+    rich_zip_path, _ = storage.get_asset(job.result.rich.zip_asset_id)
+    with zipfile.ZipFile(rich_zip_path) as zf:
+        names = set(zf.namelist())
+        assert "rich/preview.html" in names
+        assert any(n.startswith("rich/block_") and n.endswith(".svg") for n in names)
+        html_content = zf.read("rich/preview.html").decode("utf-8")
+
+    # HTML in the ZIP must use relative paths so it works when opened from disk
+    assert "/v1/assets/" not in html_content
+    assert "./block_01.svg" in html_content or "block_01.svg" in html_content
 
 
 def test_approve_only_after_success(tmp_path) -> None:

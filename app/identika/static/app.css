@@ -22,6 +22,8 @@
   --radius-md: 8px;
   --radius-sm: 8px;
   --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.08), 0 8px 24px rgba(15, 23, 42, 0.06);
+  --slide-native-width: 900;
+  --slide-native-height: 1200;
 }
 
 * {
@@ -378,6 +380,23 @@ button:disabled,
 }
 
 .button--danger {
+  color: #ffffff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.button--danger:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.button--danger-outline {
+  color: var(--danger);
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.button--danger-outline:hover {
   color: #ffffff;
   background: var(--danger);
   border-color: var(--danger);
@@ -1112,6 +1131,15 @@ code {
   justify-content: flex-end;
 }
 
+.job-actions form:has(.button--danger) {
+  flex-basis: 100%;
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 10px;
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
 .slide-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -1125,9 +1153,18 @@ code {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--surface);
+  position: relative;
+  transition: border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.slide-tile:hover {
+  border-color: var(--accent-strong);
+  box-shadow: 0 12px 32px rgba(79, 70, 229, 0.1);
 }
 
 .slide-preview {
+  container-type: inline-size;
+  container-name: slide-preview;
   position: relative;
   width: 100%;
   max-width: 220px;
@@ -1142,12 +1179,12 @@ code {
   position: absolute;
   top: 0;
   left: 0;
-  width: 900px;
-  height: 1200px;
+  width: calc(var(--slide-native-width) * 1px);
+  height: calc(var(--slide-native-height) * 1px);
   max-width: none;
   border: 0;
-  transform: scale(calc(220 / 900));
   transform-origin: top left;
+  transform: scale(calc(100cqw / 900px));
   pointer-events: none;
 }
 
@@ -1164,8 +1201,15 @@ code {
   margin-top: 10px;
 }
 
+.slide-quick-actions form {
+  min-width: 0;
+}
+
 .slide-quick-actions .button {
   width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 13px;
 }
 
 .slide-flag {
@@ -1299,6 +1343,46 @@ code {
     width: 100%;
   }
 
+  .job-actions form:has(.button--danger) {
+    justify-content: stretch;
+  }
+
+  .job-actions form:has(.button--danger) .button {
+    width: 100%;
+  }
+
+  .job-panel .section-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .job-tabs {
+    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .job-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .job-tabs .tab-btn {
+    flex: 0 0 auto;
+    padding: 6px 14px;
+    font-size: 13px;
+  }
+
+  .slide-preview {
+    max-width: min(100%, 280px);
+    margin-inline: auto;
+  }
+
+  .slide-quick-actions {
+    grid-template-columns: 1fr;
+  }
+
   .settings-actions .button,
   .settings-test-form .button {
     width: 100%;
@@ -1415,6 +1499,11 @@ code {
     flex-direction: column;
   }
 
+  .job-tabs .tab-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
   .segmented {
     grid-template-columns: 1fr;
     border-radius: var(--radius-lg);
@@ -1473,10 +1562,12 @@ code {
 .job-tabs {
   display: flex;
   gap: 4px;
+  flex-wrap: wrap;
   background: var(--surface-soft);
   padding: 4px;
   border-radius: 999px;
   border: 1px solid var(--line);
+  max-width: 100%;
 }
 
 .job-tabs .tab-btn {
@@ -1508,24 +1599,20 @@ code {
 }
 
 /* Elegant Slide Tile Upgrades */
-.slide-tile {
-  position: relative;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
 
-.slide-tile:hover {
-  transform: translateY(-4px);
-  border-color: var(--accent-strong);
-  box-shadow: 0 20px 48px rgba(79, 70, 229, 0.12);
-}
-
-.slide-preview,
-.slide-preview iframe {
+.slide-preview {
   transition: border-color 0.2s ease;
 }
 
 .slide-tile:hover .slide-preview {
   border-color: var(--accent-strong);
+}
+
+.slide-tile h3 {
+  margin-bottom: 6px;
+  font-size: 17px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .slide-subtitle {

@@ -86,6 +86,39 @@ def test_openrouter_text_plan_is_applied(tmp_path, monkeypatch) -> None:
     assert any("OpenRouter" in item for item in result.info)
 
 
+def test_openrouter_enforces_white_background_and_kit_contract(monkeypatch) -> None:
+    settings.identika_provider = "openrouter"
+    settings.openrouter_api_key = "test-key"
+    settings.identika_enable_ai_images = False
+
+    plan = _text_plan()
+    plan["slides"][5]["bullets"] = ["Лишний текст"]
+    plan["slides"][9]["title"] = "Неверный заголовок"
+    plan["slides"][9]["subtitle"] = "Неверный подзаголовок"
+    plan["slides"][9]["bullets"] = ["Товар", "Кабель", "Упаковка", "Инструкция", "Гарантия"]
+
+    fake_client = FakeAsyncClient()
+    fake_client.response_json = {
+        "choices": [{"message": {"content": json.dumps(plan, ensure_ascii=False)}}]
+    }
+    monkeypatch.setattr("identika.providers.openrouter.httpx.AsyncClient", lambda *a, **k: fake_client)
+
+    result = asyncio.run(
+        OpenRouterProvider().generate(CreateJobRequest(product=ProductContext(title="Тест")))
+    )
+
+    slide6 = result.slides[5]
+    slide10 = result.slides[9]
+    assert slide6.bullets == []
+    assert slide10.title == "Комплект поставки"
+    assert slide10.subtitle == "Инфографика состава комплекта"
+    assert slide10.bullets == ["Товар", "Кабель", "Упаковка", "Инструкция"]
+    title_block = next(block for block in slide10.text_blocks if block.kind == "title")
+    subtitle_block = next(block for block in slide10.text_blocks if block.kind == "subtitle")
+    assert title_block.text == slide10.title
+    assert subtitle_block.text == slide10.subtitle
+
+
 def test_openrouter_image_generation_stores_background_assets(tmp_path, monkeypatch) -> None:
     settings.identika_provider = "openrouter"
     settings.openrouter_api_key = "test-key"
