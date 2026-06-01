@@ -45,3 +45,31 @@ def test_upload_to_wb_success_redirects_with_ok(client: TestClient) -> None:
     page = client.get(f"/jobs/{job_id}?upload=ok")
     assert page.status_code == 200
     assert "успешно отправлен" in page.text.lower()
+
+
+def test_upload_to_wb_failure_redirects_with_detail(client: TestClient, monkeypatch) -> None:
+    async def fake_upload_job(self, job: JobRecord, public_base_url: str = "") -> dict:
+        return {"ok": False, "detail": "upstream timeout", "status": 504}
+
+    monkeypatch.setattr(WBToolClient, "upload_job", fake_upload_job)
+    demo = client.post("/demo")
+    job_id = _job_id_from_location(demo.headers["location"])
+    client.post(f"/v1/generation/jobs/{job_id}/approve")
+    upload = client.post(f"/jobs/{job_id}/upload-to-wb")
+    assert upload.status_code == 303
+    assert "upload=error" in upload.headers["location"]
+    assert "upload_detail=" in upload.headers["location"]
+
+
+def test_upload_to_wb_failure_redirects_with_detail(client: TestClient, monkeypatch) -> None:
+    async def fake_upload_job(self, job: JobRecord, public_base_url: str = "") -> dict:
+        return {"ok": False, "detail": "upstream timeout", "status": 504}
+
+    monkeypatch.setattr(WBToolClient, "upload_job", fake_upload_job)
+    demo = client.post("/demo")
+    job_id = _job_id_from_location(demo.headers["location"])
+    client.post(f"/v1/generation/jobs/{job_id}/approve")
+    upload = client.post(f"/jobs/{job_id}/upload-to-wb")
+    assert upload.status_code == 303
+    assert "upload=error" in upload.headers["location"]
+    assert "upload_detail=" in upload.headers["location"]

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import quote
+
 import httpx
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
@@ -10,7 +12,7 @@ from identika.models import CreateJobRequest, ProductContext, ResultTextPatch, S
 from identika.services.jobs import JobService
 from identika.services.product_images import attach_source_images
 from identika.services.uploads import save_source_images
-from identika.services.wb_tool import WBToolClient
+from identika.services.wb_tool import WBToolClient, upload_redirect_query
 
 router = APIRouter()
 
@@ -218,6 +220,10 @@ async def create_page(request: Request) -> HTMLResponse:
             "base_path": settings.public_base_path,
             "active_page": "create",
             "page_title": "Создать проект",
+            "photo_hint": (
+                "Если у товара нет фото в WB, загрузите до 4 фото в блоке «Ваш товар» "
+                "перед нажатием «Сгенерировать»."
+            ),
         }
     )
     return request.app.state.templates.TemplateResponse(request, "create.html", context)
@@ -233,6 +239,7 @@ async def job_page(request: Request, job_id: str) -> HTMLResponse:
     can_approve = bool(job.result and job.status != "approved")
     can_upload = bool(job.result and job.status == "approved")
     upload_status = request.query_params.get("upload", "")
+    upload_detail = request.query_params.get("upload_detail", "")
     return apply_no_cache(
         request.app.state.templates.TemplateResponse(
             request,
@@ -246,6 +253,7 @@ async def job_page(request: Request, job_id: str) -> HTMLResponse:
                 "can_approve": can_approve,
                 "can_upload": can_upload,
                 "upload_status": upload_status,
+                "upload_detail": upload_detail,
             },
         )
     )
@@ -303,10 +311,14 @@ async def generate_from_wb(
     source_image_asset_ids: str = Form(""),
 ) -> RedirectResponse:
     try:
-        context = await WBToolClient().product_context(sku_id, account_id)
+        wb = WBToolClient()
+        product, _image_notes = await wb.resolve_product_images(
+            sku_id,
+            account_id,
+            ProductContext(account_id=account_id, sku_id=sku_id),
+        )
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"WB Tool error: {type(exc).__name__}") from exc
-    product = ProductContext.model_validate(context)
     attach_source_images(product, parse_source_image_ids(source_image_asset_ids))
     job = await service(request).create_job(
         CreateJobRequest(
@@ -393,10 +405,13 @@ async def upload_job_to_wb(request: Request, job_id: str) -> RedirectResponse:
     try:
         result = await WBToolClient().upload_job(job, public_base_url(request))
     except httpx.HTTPError as exc:
-        return RedirectResponse(url=url(f"/jobs/{job_id}?upload=error"), status_code=303)
-    if not result.get("ok"):
-        return RedirectResponse(url=url(f"/jobs/{job_id}?upload=error"), status_code=303)
-    return RedirectResponse(url=url(f"/jobs/{job_id}?upload=ok"), status_code=303)
+        detail = quote(str(exc)[:240])
+        return RedirectResponse(
+            url=url(f"/jobs/{job_id}?upload=error&upload_detail={detail}"),
+            status_code=303,
+        )
+    query = upload_redirect_query(result)
+    return RedirectResponse(url=url(f"/jobs/{job_id}?{query}"), status_code=303)
 
 
 @router.patch("/v1/generation/jobs/{job_id}/result/text")

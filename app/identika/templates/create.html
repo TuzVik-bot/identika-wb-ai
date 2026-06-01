@@ -20,6 +20,9 @@
         <div id="source-preview" class="source-preview" hidden aria-live="polite"></div>
         <input type="hidden" id="source-image-asset-ids" name="source_image_asset_ids" value="">
         <p id="upload-status" class="text-muted">До 4 фото товара с разных сторон</p>
+        {% if photo_hint %}
+        <p class="notice notice--warning photo-hint" role="status">{{ photo_hint }}</p>
+        {% endif %}
       </form>
     </section>
 

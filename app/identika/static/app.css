@@ -1055,6 +1055,13 @@ code {
   border: 1px solid #9fd9b5;
 }
 
+.notice--warning,
+.photo-hint {
+  color: #854d0e;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+}
+
 .source-preview {
   display: flex;
   flex-wrap: wrap;

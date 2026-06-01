@@ -34,8 +34,16 @@
   <section class="surface-card notice notice--error">{{ job.error }}</section>
   {% elif upload_status == 'ok' %}
   <section class="surface-card notice notice--success">Пакет успешно отправлен в WB Tool.</section>
+  {% elif upload_status == 'staging' %}
+  <section class="surface-card notice notice--warning">
+    <p>ZIP и manifest подготовлены для WB Tool. Автозагрузка на маркетплейс ещё не включена на стороне WB Tool — скачайте Export ZIP или дождитесь реализации <code>POST /api/ai/jobs/{id}/upload</code>.</p>
+    {% if upload_detail %}<p class="text-muted">{{ upload_detail }}</p>{% endif %}
+  </section>
   {% elif upload_status == 'error' %}
-  <section class="surface-card notice notice--error">Не удалось загрузить пакет в WB Tool. Проверьте, что сервис доступен.</section>
+  <section class="surface-card notice notice--error">
+    <p>Не удалось загрузить пакет в WB Tool. Проверьте, что сервис доступен и job утверждён (approve).</p>
+    {% if upload_detail %}<p class="text-muted">{{ upload_detail }}</p>{% endif %}
+  </section>
   {% elif request.query_params.get('rerender') == 'ok' %}
   <section class="surface-card notice notice--success">Слайды пересобраны с актуальными фото.</section>
   {% elif job.status in ['queued', 'running'] and not job.result %}

@@ -49,7 +49,7 @@ docker compose up --build
 - Проект инициализирован как git-репозиторий (`.gitignore` исключает `data/`, `assets/`, `.env`).
 - БД: `data/identika.sqlite`.
 - Ассеты: `assets/`.
-- `pytest`: 43 теста (generation, API, UI smoke, upload, OpenRouter mock, WB upload, settings/rebrand, WB CDN, rerender).
+- `pytest`: 48+ тестов (generation, API, UI smoke, upload, WB Tool integration, OpenRouter mock, WB upload/staging, settings/rebrand, WB CDN, rerender).
 - GitHub Actions CI: `.github/workflows/ci.yml`.
 
 Не удалять `data/` и `assets/`: это текущая рабочая история и экспортные файлы.
@@ -157,16 +157,35 @@ Runbook для заказчика:
 - Секреты WB/B2B/OpenRouter не должны уходить в результат, ZIP, manifest или логи.
 - UI должен быть похож на современный личный кабинет Aidentika, с реальными локальными метриками, а не декоративной промо-страницей.
 
+## WB Tool интеграция (Step 1)
+
+Identika → WB Tool (`WB_TOOL_BASE_URL`, по умолчанию `http://127.0.0.1:8765`):
+
+| Метод | Путь | Назначение |
+|-------|------|------------|
+| GET | `/api/ai/accounts` | Список магазинов |
+| GET | `/api/ai/products` | Каталог SKU (`account_id`, `q`, `limit`) |
+| GET | `/api/ai/products/{sku_id}/context` | Контекст для генерации (сейчас часто `images: []`) |
+| GET | `/api/ai/products/{sku_id}/media` \| `/images` \| `/photos` | Опционально: Identika пробует при пустом `images` |
+| POST | `/api/ai/jobs/{job_id}/upload` | Выгрузка approve-пакета (в WB Tool сейчас **501**) |
+| POST | `/api/ai/jobs/{job_id}/upload/staging` | Зарезервировано: очередь на pull ZIP + manifest |
+
+Фото товара: `context.images` → опциональные media-роуты → CDN probe (`wb_cdn.discover_wb_image_urls`) → ручная загрузка на `/create`.
+
+Upload payload (`build_upload_payload`): `contract_version`, `account_id`, `nm_id`, `sku_id`, `export_url`, `manifest_url`, inline `manifest`, список `assets` с публичными URL.
+
+При **501** от upload Identika редиректит `?upload=staging` (ZIP готов, ждём реализацию upload в WB Tool). При ошибке сети — `?upload=error&upload_detail=…`.
+
 ## Известные ограничения
 
-- WB upload зависит от внешнего WB Tool на `:8765`; без него redirect `?upload=error`.
+- WB upload зависит от внешнего WB Tool; пока `POST …/upload` в WB Tool возвращает 501 — только staging + Export ZIP.
 - OpenRouter image generation требует API key и может частично падать → fallback на programmatic SVG с warning.
 - Async jobs (BackgroundTasks) включаются только при `openrouter` + `IDENTIKA_ENABLE_AI_IMAGES`; mock остаётся синхронным.
 - Browser/UI visual regression tests не автоматизированы.
 
 ## Рекомендуемый следующий шаг
 
-1. Согласовать финальный контракт WB Tool upload с реальной загрузкой медиа на маркетплейс.
+1. Реализовать в WB Tool `POST /api/ai/jobs/{id}/upload` (и опционально `/upload/staging`) + заполнение `images` в `/context` из Content API.
 2. Прогнать end-to-end с живым OpenRouter и замерить latency/cost на 10 image calls.
 3. Добавить browser visual regression для create/job flow.
 

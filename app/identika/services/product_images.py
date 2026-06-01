@@ -5,7 +5,7 @@ import logging
 import httpx
 
 from identika.models import CreateJobRequest, ProductContext, ProductImage
-from identika.services.wb_cdn import wb_image_url_candidates
+from identika.services.wb_cdn import discover_wb_image_urls, wb_image_url_candidates, wb_product_image_urls
 from identika.storage import Storage
 
 logger = logging.getLogger("identika.product_images")
@@ -61,15 +61,36 @@ def ensure_product_image_urls(product: ProductContext, max_pics: int = 5) -> Pro
     if not nm_id or nm_id <= 0:
         return product
     images = list(product.images)
-    for index in range(1, max(1, max_pics) + 1):
+    for index, url in enumerate(wb_product_image_urls(nm_id, max_pics=max_pics), start=1):
         images.append(
             ProductImage(
-                url=wb_image_url_candidates(nm_id, index)[0],
+                url=url,
                 role="source",
                 alt=f"WB photo {index}",
             )
         )
     product.images = images
+    return product
+
+
+async def ensure_product_image_urls_async(
+    product: ProductContext,
+    *,
+    max_pics: int = 10,
+    client: httpx.AsyncClient | None = None,
+) -> ProductContext:
+    """CDN fallback with HEAD probe so only existing photo indices are used."""
+    if _has_source_assets(product) or _pending_urls(product):
+        return product
+    nm_id = product.nm_id
+    if not nm_id or nm_id <= 0:
+        return product
+    discovered = await discover_wb_image_urls(nm_id, max_index=max_pics, client=client)
+    urls = discovered or wb_product_image_urls(nm_id, max_pics=min(max_pics, 5))
+    product.images = [
+        ProductImage(url=url, role="source", alt=f"WB photo {index}")
+        for index, url in enumerate(urls, start=1)
+    ]
     return product
 
 
@@ -158,7 +179,8 @@ async def download_product_images(
         and not had_explicit_urls
         and bool(product.nm_id and product.nm_id > 0)
     )
-    product = ensure_product_image_urls(product)
+    if not needs_cdn_fallback:
+        product = ensure_product_image_urls(product)
     images = list(product.images)
     warnings: list[str] = []
     async with httpx.AsyncClient(
@@ -166,6 +188,9 @@ async def download_product_images(
         follow_redirects=True,
         headers=DOWNLOAD_HEADERS,
     ) as client:
+        if needs_cdn_fallback:
+            product = await ensure_product_image_urls_async(product, client=client)
+            images = list(product.images)
         for idx, image in enumerate(images):
             if image.asset_id or not image.url:
                 continue
