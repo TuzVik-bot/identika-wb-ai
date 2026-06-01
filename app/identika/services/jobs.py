@@ -16,7 +16,14 @@ from identika.models import (
     TextBlock,
 )
 from identika.providers.openrouter import get_provider
-from identika.services.product_images import download_product_images, prepare_job_request
+from identika.services.product_images import (
+    attach_source_images,
+    download_product_images,
+    ensure_source_assets_after_download,
+    has_source_assets,
+    prepare_job_request,
+    validate_can_start_generation,
+)
 from identika.services.rendering import (
     build_rich_zip,
     build_export_zip,
@@ -43,6 +50,10 @@ class JobService:
         background_tasks: BackgroundTasks | None = None,
     ) -> JobRecord:
         request = prepare_job_request(request)
+        validate_can_start_generation(
+            request.product,
+            allow_without_photos=request.allow_generate_without_photos,
+        )
         job = self.storage.create_job(request.model_dump(mode="json"))
         eff = EffectiveSettings.resolve(self.storage)
         if (
@@ -68,6 +79,10 @@ class JobService:
         try:
             request.product, image_warnings = await download_product_images(
                 job_id, request.product, self.storage
+            )
+            ensure_source_assets_after_download(
+                request.product,
+                allow_without_photos=request.allow_generate_without_photos,
             )
             provider = get_provider(self.storage)
             result = await provider.generate(request, eff)
@@ -356,7 +371,7 @@ class JobService:
         if not job.result:
             raise ValueError("job has no result")
         product = job.result.product
-        if not any(img.role == "source" and img.asset_id for img in product.images):
+        if not has_source_assets(product):
             product, image_warnings = await download_product_images(job_id, product, self.storage)
             job.result.product = product
             if image_warnings:
@@ -366,6 +381,24 @@ class JobService:
                     if "фото" not in w.lower() and "cdn" not in w.lower()
                 ]
                 job.result.warnings = kept + image_warnings
+        quality_mode: QualityMode = "final" if job.status == "approved" else "preview"
+        job.result = self._render_assets(job_id, job.result, quality_mode=quality_mode)
+        self.storage.update_result(job_id, job.result)
+        return self.storage.get_job(job_id)
+
+    async def attach_source_images_to_job(
+        self,
+        job_id: str,
+        asset_ids: list[str],
+    ) -> JobRecord:
+        job = self.storage.get_job(job_id)
+        if not job.result:
+            raise ValueError("job has no result")
+        if job.status == "approved":
+            raise ValueError("approved job cannot be edited")
+        if not asset_ids:
+            raise ValueError("at least one source image is required")
+        attach_source_images(job.result.product, asset_ids)
         quality_mode: QualityMode = "final" if job.status == "approved" else "preview"
         job.result = self._render_assets(job_id, job.result, quality_mode=quality_mode)
         self.storage.update_result(job_id, job.result)

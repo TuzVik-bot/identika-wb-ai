@@ -23,6 +23,13 @@
         {% if photo_hint %}
         <p class="notice notice--warning photo-hint" role="status">{{ photo_hint }}</p>
         {% endif %}
+        {% if photo_error %}
+        <p class="notice notice--error" role="alert">{{ photo_error }}</p>
+        {% endif %}
+        <label class="field field--checkbox allow-without-photos">
+          <input type="checkbox" id="allow-generate-without-photos" name="allow_generate_without_photos" value="1">
+          <span>Сгенерировать без фото (только текст, без картинок товара)</span>
+        </label>
       </form>
     </section>
 
@@ -92,12 +99,14 @@
           <h3>{{ product.title or product.vendor_code or product.nm_id or product.sku_id }}</h3>
           <p>SKU {{ product.sku_id }}{% if product.nm_id %} · nmID {{ product.nm_id }}{% endif %}{% if product.subject_name %} · {{ product.subject_name }}{% endif %}</p>
         </div>
-        <form method="post" action="{{ base_path }}/wb/generate" class="wb-generate-form" data-submit-loading>
+        <form method="post" action="{{ base_path }}/wb/generate" class="wb-generate-form" data-submit-loading data-require-photo="1">
           <input type="hidden" name="account_id" value="{{ selected_account_id }}">
           <input type="hidden" name="sku_id" value="{{ product.sku_id }}">
           <input type="hidden" name="brief" value="{{ brief }}">
           <input type="hidden" name="source_image_asset_ids" class="source-image-ids-field" value="">
-          <button type="submit" class="button">Сгенерировать</button>
+          <input type="hidden" name="allow_generate_without_photos" class="allow-without-photos-field" value="">
+          <button type="submit" class="button wb-generate-btn" disabled title="Сначала загрузите фото товара слева">Сгенерировать</button>
+          <p class="text-muted wb-generate-hint">Загрузите хотя бы 1 фото в блоке «Ваш товар» или отметьте генерацию без фото.</p>
         </form>
       </article>
       {% endfor %}
@@ -189,7 +198,28 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusEl = document.getElementById('upload-status');
   const dropZone = document.getElementById('drop-zone');
   const generateFields = document.querySelectorAll('.source-image-ids-field');
+  const allowCheckbox = document.getElementById('allow-generate-without-photos');
+  const allowFields = document.querySelectorAll('.allow-without-photos-field');
+  const generateButtons = document.querySelectorAll('.wb-generate-btn');
   const basePath = {{ base_path|tojson }};
+
+  function syncGenerateButtons() {
+    const hasUpload = Boolean(idsField.value.trim());
+    const allowWithout = Boolean(allowCheckbox?.checked);
+    const enabled = hasUpload || allowWithout;
+    generateButtons.forEach((button) => {
+      button.disabled = !enabled;
+      button.title = enabled
+        ? ''
+        : 'Сначала загрузите фото товара слева или отметьте «Сгенерировать без фото»';
+    });
+    allowFields.forEach((field) => {
+      field.value = allowWithout ? '1' : '';
+    });
+  }
+
+  allowCheckbox?.addEventListener('change', syncGenerateButtons);
+  syncGenerateButtons();
 
   document.querySelectorAll('[data-submit-loading]').forEach((form) => {
     form.addEventListener('submit', () => {
@@ -225,6 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const ids = (data.asset_ids || []).join(',');
       idsField.value = ids;
       generateFields.forEach((field) => { field.value = ids; });
+      syncGenerateButtons();
       statusEl.textContent = `Загружено ${data.asset_ids.length} фото`;
     } catch (error) {
       statusEl.textContent = `Ошибка загрузки: ${error.message}`;

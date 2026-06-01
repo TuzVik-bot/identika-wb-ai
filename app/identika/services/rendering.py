@@ -187,7 +187,7 @@ def _render_product_composite(slide: SlideSpec, source_href: str) -> bytes:
     return "\n".join(parts).encode("utf-8")
 
 
-def _render_placeholder(slide: SlideSpec) -> bytes:
+def _render_missing_photo_state(slide: SlideSpec) -> bytes:
     w, h = slide.width, slide.height
     bg = "#ffffff" if slide.role == "white_background" else "#f4f7fb"
     accent = "#2f6fed" if slide.role == "hero" else "#243b53"
@@ -200,10 +200,9 @@ def _render_placeholder(slide: SlideSpec) -> bytes:
     parts.extend(_text_overlay_parts(slide, accent=accent))
     parts.extend(
         [
-            f'<rect x="150" y="{product_y}" width="600" height="360" rx="34" fill="#ffffff" stroke="#bcccdc" stroke-width="3"/>',
-            f'<ellipse cx="450" cy="{product_y + 260}" rx="210" ry="44" fill="#d9e2ec"/>',
-            f'<rect x="315" y="{product_y + 70}" width="270" height="210" rx="36" fill="#e6f0ff" stroke="#2f6fed" stroke-width="5"/>',
-            f'<text x="450" y="{product_y + 190}" text-anchor="middle" font-family="Arial, DejaVu Sans, sans-serif" font-size="34" font-weight="700" fill="#102a43">ТОВАР</text>',
+            f'<rect x="150" y="{product_y}" width="600" height="360" rx="34" fill="#ffffff" stroke="#bcccdc" stroke-width="3" stroke-dasharray="12 10"/>',
+            f'<text x="450" y="{product_y + 165}" text-anchor="middle" font-family="Arial, DejaVu Sans, sans-serif" font-size="30" font-weight="700" fill="#102a43">Загрузите фото товара</text>',
+            f'<text x="450" y="{product_y + 210}" text-anchor="middle" font-family="Arial, DejaVu Sans, sans-serif" font-size="22" fill="#627d98">Пример с разных ракурсов</text>',
         ]
     )
     parts.append("</svg>")
@@ -219,7 +218,7 @@ def render_slide_svg(
     background_image_data_uri: str | None = None,
 ) -> bytes:
     if slide.image_cleared:
-        return _render_placeholder(slide)
+        return _render_missing_photo_state(slide)
 
     source_image_href = source_image_href or source_image_data_uri
     background_image_href = background_image_href or background_image_data_uri
@@ -230,13 +229,13 @@ def render_slide_svg(
             if slide.index == 10:
                 return _render_kit_contents_infographic(slide, product_href)
             return _render_white_background(slide, product_href)
-        return _render_placeholder(slide)
+        return _render_missing_photo_state(slide)
 
     if background_image_href:
         return _render_full_background(slide, background_image_href)
     if source_image_href:
         return _render_product_composite(slide, source_image_href)
-    return _render_placeholder(slide)
+    return _render_missing_photo_state(slide)
 
 
 def render_pdf_preview(result: GenerationResult) -> bytes:

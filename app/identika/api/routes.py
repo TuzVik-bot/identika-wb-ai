@@ -10,7 +10,12 @@ from identika import __version__
 from identika.config import EffectiveSettings, mask_api_key, settings
 from identika.models import CreateJobRequest, ProductContext, ResultTextPatch, SlideTextUpdate
 from identika.services.jobs import JobService
-from identika.services.product_images import attach_source_images
+from identika.services.product_images import (
+    SourcePhotosRequiredError,
+    attach_source_images,
+    has_source_assets,
+    validate_can_start_generation,
+)
 from identika.services.uploads import save_source_images
 from identika.services.wb_tool import WBToolClient, upload_redirect_query
 
@@ -221,9 +226,10 @@ async def create_page(request: Request) -> HTMLResponse:
             "active_page": "create",
             "page_title": "Создать проект",
             "photo_hint": (
-                "Если у товара нет фото в WB, загрузите до 4 фото в блоке «Ваш товар» "
-                "перед нажатием «Сгенерировать»."
+                "Если у товара нет фото в WB, загрузите до 4 фото в блоке «Ваш товар» — "
+                "без них генерация не запустится."
             ),
+            "photo_error": request.query_params.get("photo_error", ""),
         }
     )
     return request.app.state.templates.TemplateResponse(request, "create.html", context)
@@ -242,6 +248,7 @@ async def job_page(request: Request, job_id: str) -> HTMLResponse:
     can_upload = bool(job.result and job.status == "approved" and can_export)
     upload_status = request.query_params.get("upload", "")
     upload_detail = request.query_params.get("upload_detail", "")
+    missing_source_photos = bool(job.result and not has_source_assets(job.result.product))
     return apply_no_cache(
         request.app.state.templates.TemplateResponse(
             request,
@@ -258,6 +265,7 @@ async def job_page(request: Request, job_id: str) -> HTMLResponse:
                 "can_upload": can_upload,
                 "upload_status": upload_status,
                 "upload_detail": upload_detail,
+                "missing_source_photos": missing_source_photos,
             },
         )
     )
@@ -300,6 +308,7 @@ async def demo(request: Request, background_tasks: BackgroundTasks):
             "characteristics": {"Питание": "USB", "Режимы": "7 проекций", "Таймер": "1/2/4 часа"},
         },
         brief="Демо-генерация без внешних API.",
+        allow_generate_without_photos=True,
     )
     job = await service(request).create_job(payload, background_tasks=background_tasks)
     return RedirectResponse(url=url(f"/jobs/{job.id}"), status_code=303)
@@ -313,6 +322,7 @@ async def generate_from_wb(
     sku_id: int = Form(...),
     brief: str = Form(""),
     source_image_asset_ids: str = Form(""),
+    allow_generate_without_photos: str = Form(""),
 ) -> RedirectResponse:
     try:
         wb = WBToolClient()
@@ -323,17 +333,33 @@ async def generate_from_wb(
         )
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"WB Tool error: {type(exc).__name__}") from exc
-    attach_source_images(product, parse_source_image_ids(source_image_asset_ids))
-    job = await service(request).create_job(
-        CreateJobRequest(
-            product=product,
-            brief=brief,
-            style="marketplace-clean",
-            outputs=["wb_10_slides", "rich_package"],
-            source_image_asset_ids=parse_source_image_ids(source_image_asset_ids),
-        ),
-        background_tasks=background_tasks,
-    )
+    uploaded_ids = parse_source_image_ids(source_image_asset_ids)
+    attach_source_images(product, uploaded_ids)
+    allow_without = allow_generate_without_photos in {"1", "true", "on", "yes"}
+    try:
+        validate_can_start_generation(product, allow_without_photos=allow_without)
+    except SourcePhotosRequiredError as exc:
+        return RedirectResponse(
+            url=url(f"/create?account_id={account_id}&brief={quote(brief)}&photo_error={quote(str(exc))}"),
+            status_code=303,
+        )
+    try:
+        job = await service(request).create_job(
+            CreateJobRequest(
+                product=product,
+                brief=brief,
+                style="marketplace-clean",
+                outputs=["wb_10_slides", "rich_package"],
+                source_image_asset_ids=uploaded_ids,
+                allow_generate_without_photos=allow_without,
+            ),
+            background_tasks=background_tasks,
+        )
+    except SourcePhotosRequiredError as exc:
+        return RedirectResponse(
+            url=url(f"/create?account_id={account_id}&brief={quote(brief)}&photo_error={quote(str(exc))}"),
+            status_code=303,
+        )
     return RedirectResponse(url=url(f"/jobs/{job.id}"), status_code=303)
 
 
@@ -352,13 +378,67 @@ async def create_generation_job(
     payload: CreateJobRequest,
     background_tasks: BackgroundTasks,
 ) -> dict:
-    job = await service(request).create_job(payload, background_tasks=background_tasks)
+    try:
+        job = await service(request).create_job(payload, background_tasks=background_tasks)
+    except SourcePhotosRequiredError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {
         "id": job.id,
         "status": job.status,
         "result_url": url(f"/v1/generation/jobs/{job.id}/result"),
         "export_url": url(f"/v1/generation/jobs/{job.id}/export"),
     }
+
+
+@router.post("/v1/generation/jobs/{job_id}/source-images")
+async def attach_job_source_images_api(
+    request: Request,
+    job_id: str,
+    source_image_asset_ids: str = Form(""),
+    files: list[UploadFile] = File(default=[]),
+) -> JSONResponse:
+    asset_ids = parse_source_image_ids(source_image_asset_ids)
+    if files:
+        upload = await save_source_images(service(request).storage, files)
+        asset_ids.extend(upload["asset_ids"])
+    try:
+        job = await service(request).attach_source_images_to_job(job_id, asset_ids)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="job not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return JSONResponse(
+        content={
+            "ok": True,
+            "job_id": job.id,
+            "source_assets": sum(
+                1 for img in job.result.product.images if img.role == "source" and img.asset_id
+            )
+            if job.result
+            else 0,
+        },
+        headers=NO_CACHE_HEADERS,
+    )
+
+
+@router.post("/jobs/{job_id}/source-images")
+async def attach_job_source_images_page(
+    request: Request,
+    job_id: str,
+    source_image_asset_ids: str = Form(""),
+    files: list[UploadFile] = File(default=[]),
+) -> RedirectResponse:
+    asset_ids = parse_source_image_ids(source_image_asset_ids)
+    if files:
+        upload = await save_source_images(service(request).storage, files)
+        asset_ids.extend(upload["asset_ids"])
+    try:
+        await service(request).attach_source_images_to_job(job_id, asset_ids)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="job not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(url=url(f"/jobs/{job_id}?photos=attached"), status_code=303)
 
 
 @router.get("/v1/generation/jobs")

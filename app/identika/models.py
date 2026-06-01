@@ -102,6 +102,7 @@ class CreateJobRequest(BaseModel):
     style: str = "marketplace-clean"
     outputs: list[str] = Field(default_factory=lambda: ["wb_10_slides", "rich_package"])
     source_image_asset_ids: list[str] = Field(default_factory=list)
+    allow_generate_without_photos: bool = False
 
 
 class SlideTextUpdate(BaseModel):

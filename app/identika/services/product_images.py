@@ -45,8 +45,55 @@ def prepare_job_request(payload: CreateJobRequest) -> CreateJobRequest:
     return payload
 
 
+class SourcePhotosRequiredError(ValueError):
+    """Generation blocked because no product photos are available."""
+
+
+SOURCE_PHOTOS_REQUIRED_MSG = (
+    "Нет фото товара. Загрузите хотя бы одно фото в блоке «Ваш товар» "
+    "или отметьте «Сгенерировать без фото»."
+)
+
+SOURCE_PHOTOS_AFTER_DOWNLOAD_MSG = (
+    "Фото товара не загружены: WB/CDN недоступны. "
+    "Загрузите фото вручную на странице проекта и нажмите «Пересобрать слайды»."
+)
+
+
+def count_source_assets(product: ProductContext) -> int:
+    return sum(1 for img in product.images if img.role == "source" and img.asset_id)
+
+
+def has_source_assets(product: ProductContext) -> bool:
+    return count_source_assets(product) > 0
+
+
 def _has_source_assets(product: ProductContext) -> bool:
-    return any(img.role == "source" and img.asset_id for img in product.images)
+    return has_source_assets(product)
+
+
+def validate_can_start_generation(
+    product: ProductContext,
+    *,
+    allow_without_photos: bool = False,
+) -> None:
+    if allow_without_photos or has_source_assets(product):
+        return
+    if _pending_urls(product):
+        return
+    if product.nm_id and product.nm_id > 0:
+        return
+    raise SourcePhotosRequiredError(SOURCE_PHOTOS_REQUIRED_MSG)
+
+
+def ensure_source_assets_after_download(
+    product: ProductContext,
+    *,
+    allow_without_photos: bool = False,
+) -> None:
+    if allow_without_photos or has_source_assets(product):
+        return
+    raise SourcePhotosRequiredError(SOURCE_PHOTOS_AFTER_DOWNLOAD_MSG)
 
 
 def _pending_urls(product: ProductContext) -> list[str]:
@@ -266,11 +313,11 @@ async def download_product_images(
         )
     elif not source_assets and needs_cdn_fallback:
         warnings.append(
-            f"Фото товара WB (nmID {product.nm_id}) недоступны на CDN — загрузите фото вручную или включите AI-фон."
+            f"Фото товара WB (nmID {product.nm_id}) недоступны на CDN — загрузите фото вручную."
         )
     elif not source_assets:
         warnings.append(
-            "В карточке WB нет фото — слайды будут без исходного фото (загрузите фото вручную или включите AI-фон)."
+            "В карточке WB нет фото — загрузите пример фото товара вручную перед экспортом."
         )
     elif failed_downloads:
         source_count = len(source_assets)

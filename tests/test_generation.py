@@ -150,7 +150,11 @@ def test_job_service_exports_assets_pdf_manifest_and_zip(tmp_path) -> None:
     storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
     service = JobService(storage)
 
-    job = asyncio.run(service.create_job(CreateJobRequest(product=product())))
+    job = asyncio.run(
+        service.create_job(
+            CreateJobRequest(product=product(), allow_generate_without_photos=True)
+        )
+    )
 
     assert job.status == "succeeded"
     assert job.result is not None
@@ -174,7 +178,11 @@ def test_rich_zip_html_uses_relative_paths_not_server_urls(tmp_path) -> None:
     storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
     service = JobService(storage)
 
-    job = asyncio.run(service.create_job(CreateJobRequest(product=product())))
+    job = asyncio.run(
+        service.create_job(
+            CreateJobRequest(product=product(), allow_generate_without_photos=True)
+        )
+    )
 
     assert job.result is not None
     assert job.result.rich.zip_asset_id
@@ -194,7 +202,11 @@ def test_rich_zip_html_uses_relative_paths_not_server_urls(tmp_path) -> None:
 def test_approve_only_after_success(tmp_path) -> None:
     storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
     service = JobService(storage)
-    job = asyncio.run(service.create_job(CreateJobRequest(product=product())))
+    job = asyncio.run(
+        service.create_job(
+            CreateJobRequest(product=product(), allow_generate_without_photos=True)
+        )
+    )
 
     approved = service.approve(job.id)
 
@@ -208,7 +220,11 @@ def test_approve_only_after_success(tmp_path) -> None:
 def test_result_does_not_include_known_secret_fields(tmp_path) -> None:
     storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
     service = JobService(storage)
-    job = asyncio.run(service.create_job(CreateJobRequest(product=product())))
+    job = asyncio.run(
+        service.create_job(
+            CreateJobRequest(product=product(), allow_generate_without_photos=True)
+        )
+    )
 
     dumped = job.result.model_dump_json() if job.result else ""
 
@@ -220,19 +236,27 @@ def test_result_does_not_include_known_secret_fields(tmp_path) -> None:
 def test_clear_slide_image_sets_flag_and_renders_placeholder(tmp_path) -> None:
     storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
     service = JobService(storage)
-    job = asyncio.run(service.create_job(CreateJobRequest(product=product())))
+    job = asyncio.run(
+        service.create_job(
+            CreateJobRequest(product=product(), allow_generate_without_photos=True)
+        )
+    )
     updated = service.clear_slide_image(job.id, 1)
     assert updated.result is not None
     slide = updated.result.slides[0]
     assert slide.image_cleared is True
     slide_path, _ = storage.get_asset(slide.asset_id)
-    assert "ТОВАР" in slide_path.read_text(encoding="utf-8")
+    assert "Загрузите фото товара" in slide_path.read_text(encoding="utf-8")
 
 
 def test_patch_result_text_updates_manifest_export(tmp_path) -> None:
     storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
     service = JobService(storage)
-    job = asyncio.run(service.create_job(CreateJobRequest(product=product())))
+    job = asyncio.run(
+        service.create_job(
+            CreateJobRequest(product=product(), allow_generate_without_photos=True)
+        )
+    )
 
     updated = service.patch_result_text(
         job.id,

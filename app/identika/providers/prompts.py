@@ -136,9 +136,9 @@ def build_image_model_user_prompt(
 
 
 def should_skip_ai_image(slide: SlideSpec, source_asset_ids: list[str]) -> bool:
-    """Skip AI when real product photos will be used in the programmatic renderer."""
+    """Skip AI when there are no source photos or real photos cover the slide."""
     if not source_asset_ids:
-        return False
+        return True
     if slide.role == "white_background":
         return True
     if slide.role == "description":

@@ -29,6 +29,11 @@ async def generate_slide_images(
         for image in result.product.images
         if image.role == "source" and image.asset_id
     ]
+    if not source_refs:
+        result.warnings.append(
+            "AI-изображения пропущены: нет исходных фото товара. Загрузите фото и пересоберите слайды."
+        )
+        return result
     failures = 0
     skipped = 0
     attempted = 0

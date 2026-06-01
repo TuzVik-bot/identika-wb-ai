@@ -107,7 +107,14 @@ def test_dynamic_routes_send_no_store_cache_control(client: TestClient) -> None:
 def test_job_page_shows_result_even_if_status_running(client: TestClient, tmp_path) -> None:
     storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
     service = JobService(storage)
-    job = asyncio.run(service.create_job(CreateJobRequest(product=ProductContext(title="Тест"))))
+    job = asyncio.run(
+        service.create_job(
+            CreateJobRequest(
+                product=ProductContext(title="Тест"),
+                allow_generate_without_photos=True,
+            )
+        )
+    )
     assert job.result is not None
 
     with storage._connect() as conn:

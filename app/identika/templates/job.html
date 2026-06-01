@@ -64,6 +64,20 @@
     <p class="text-muted">Статус: <strong>{{ job.status|status_label }}</strong>. Страница обновится автоматически.</p>
   </section>
   {% elif job.result %}
+  {% if missing_source_photos %}
+  <section class="surface-card notice notice--warning" aria-label="Нет фото товара">
+    <p><strong>Нет исходных фото товара.</strong> Слайды показывают заглушку «Загрузите фото товара» — не экспортируйте пакет, пока не добавите реальные фото.</p>
+    <form class="job-source-upload" method="post" action="{{ base_path }}/jobs/{{ job.id }}/source-images" enctype="multipart/form-data">
+      <label class="field">Загрузить фото
+        <input type="file" name="files" accept="image/*" multiple required>
+      </label>
+      <button type="submit" class="button button--accent">Прикрепить и пересобрать слайды</button>
+    </form>
+    <p class="text-muted">Или загрузите фото на <a href="{{ base_path }}/create">странице создания</a> и создайте проект заново.</p>
+  </section>
+  {% elif request.query_params.get('photos') == 'attached' %}
+  <section class="surface-card notice notice--success">Фото прикреплены, слайды пересобраны.</section>
+  {% endif %}
   <section class="surface-card job-generation-meta" aria-label="Информация о генерации">
     <div class="job-generation-meta__main">
       <span class="status status-{{ job.status }}">{{ job.status|status_label }}</span>

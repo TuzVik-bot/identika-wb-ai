@@ -27,6 +27,13 @@ def test_openrouter_without_api_key_falls_back_to_mock() -> None:
     assert any("OPENROUTER_API_KEY is empty" in warning for warning in result.warnings)
 
 
+def _png_bytes() -> bytes:
+    return bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108020000009077"
+        "530000000a49444154789c6260000000020001e221bc330000000049454e44ae426082"
+    )
+
+
 def _png_data_uri() -> str:
     png = bytes.fromhex(
         "89504e470d0a1a0a0000000d49484452000000010000000108020000009077"
@@ -126,6 +133,11 @@ def test_openrouter_image_generation_stores_background_assets(tmp_path, monkeypa
 
     storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
     job = storage.create_job(CreateJobRequest(product=ProductContext(title="Тест")).model_dump(mode="json"))
+    source_id = storage.add_asset(job.id, "source.png", _png_bytes(), "image/png")
+    product = ProductContext(
+        title="Тест",
+        images=[ProductImage(asset_id=source_id, role="source")],
+    )
 
     fake_client = FakeAsyncClient()
     fake_client.response_json = {
@@ -140,13 +152,12 @@ def test_openrouter_image_generation_stores_background_assets(tmp_path, monkeypa
     }
     monkeypatch.setattr("identika.providers.image_gen.httpx.AsyncClient", lambda *a, **k: fake_client)
 
-    base_result = asyncio.run(
-        OpenRouterProvider().generate(CreateJobRequest(product=ProductContext(title="Тест")))
-    )
+    base_result = asyncio.run(OpenRouterProvider().generate(CreateJobRequest(product=product)))
+    base_result.product = product
     updated = asyncio.run(
         generate_slide_images(
             job.id,
-            CreateJobRequest(product=ProductContext(title="Тест")),
+            CreateJobRequest(product=product),
             base_result,
             storage,
         )
