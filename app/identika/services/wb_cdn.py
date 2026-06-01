@@ -20,6 +20,11 @@ _BASKET_RANGES: tuple[tuple[int, str], ...] = (
     (2045, "13"),
     (2189, "14"),
     (2405, "15"),
+    (2621, "16"),
+    (2837, "17"),
+    (3053, "18"),
+    (3269, "19"),
+    (3485, "20"),
 )
 
 _PROBE_HEADERS = {
@@ -34,7 +39,7 @@ def wb_basket_id(vol: int) -> str:
     for upper, basket in _BASKET_RANGES:
         if vol <= upper:
             return basket
-    return "16"
+    return "21"
 
 
 def wb_image_url_candidates(nm_id: int, index: int = 1) -> list[str]:

@@ -134,14 +134,31 @@ async def _download_image_bytes(client: httpx.AsyncClient, url: str) -> tuple[by
     if "/images/big/" in url:
         base = url.rsplit(".", 1)[0]
         ext = url.rsplit(".", 1)[-1].lower() if "." in url else ""
-        if ext == "webp":
-            candidates.append(f"{base}.jpg")
-        elif ext == "jpg":
-            candidates.append(f"{base}.webp")
+        
+        # Build host variants
+        hosts = []
         if "wbbasket.ru" in url:
-            candidates.append(url.replace("wbbasket.ru", "wb.ru"))
+            hosts.append(url.replace("wbbasket.ru", "wb.ru"))
+            hosts.append(url.replace("wbbasket.ru", "wbstatic.net"))
         elif "wb.ru" in url and "wbbasket.ru" not in url:
-            candidates.append(url.replace("wb.ru", "wbbasket.ru"))
+            hosts.append(url.replace("wb.ru", "wbbasket.ru"))
+            hosts.append(url.replace("wb.ru", "wbstatic.net"))
+        elif "wbstatic.net" in url:
+            hosts.append(url.replace("wbstatic.net", "wbbasket.ru"))
+            hosts.append(url.replace("wbstatic.net", "wb.ru"))
+            
+        candidates.extend(hosts)
+        
+        # Add extension variants for all hosts
+        ext_variants = []
+        for c in candidates:
+            c_base = c.rsplit(".", 1)[0]
+            if ext == "webp":
+                ext_variants.append(f"{c_base}.jpg")
+            elif ext == "jpg":
+                ext_variants.append(f"{c_base}.webp")
+        candidates.extend(ext_variants)
+        
     seen: set[str] = set()
     for candidate in candidates:
         if candidate in seen:
@@ -207,7 +224,11 @@ async def download_product_images(
                     nm_index = None
             download_targets = [image.url]
             if nm_index and product.nm_id:
-                download_targets = wb_image_url_candidates(product.nm_id, nm_index)
+                candidates = wb_image_url_candidates(product.nm_id, nm_index)
+                if image.url not in candidates:
+                    download_targets.extend(candidates)
+                else:
+                    download_targets = candidates
             downloaded: tuple[bytes, str] | None = None
             for target in download_targets:
                 downloaded = await _download_image_bytes(client, target)
