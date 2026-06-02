@@ -1,23 +1,107 @@
 # Antigravity Handoff: Identika WB AI
 
-Дата среза: 2026-05-31.
-Рабочая папка: `/Users/home/Downloads/Identika`.
-Статус: production-ready MVP с git, CI, upload фото, OpenRouter image layer, WB upload contract и optional auth.
+Дата среза: 2026-06-02  
+Рабочая папка: `/Users/home/Downloads/Identika`  
+Статус: рабочий MVP в стиле кабинета, с API/UI флоу generate → approve → export/rich-export → upload.
 
-## Что это за проект
+## Назначение и scope
 
-Identika WB AI - локальный FastAPI-сервис для генерации комплекта медиа для карточки товара Wildberries:
+Identika WB AI - локальный FastAPI-сервис для генерации медиа карточки Wildberries:
 
-- 10 SVG-слайдов для карточки товара.
-- Rich package: HTML-превью, PDF-превью и 10 rich-блоков.
-- ZIP-экспорт с `manifest.json`, слайдами и rich-файлами.
-- Локальная история jobs в SQLite.
-- UI-кабинет Identika (ребрендинг с Aidentika): dashboard, настройки, создание проекта, страница результата.
-- Безопасная модель данных: WB/B2B/OpenRouter секреты не сохраняются в БД, manifest, ZIP или логах.
+- 10 слайдов (SVG) по контексту товара.
+- Rich-пакет (HTML + PDF + rich-блоки + отдельный rich ZIP).
+- ZIP-экспорт финального пакета с `manifest.json`.
+- История jobs и ассетов в SQLite + файловом хранилище.
+- UI-кабинет: dashboard, настройки, создание, страница job.
 
-По умолчанию проект работает в `mock`-режиме, без внешних AI/WB-вызовов.
+По умолчанию работает в `mock`, без внешних зависимостей.
 
-## Как запустить локально
+## Карта архитектуры
+
+- **Backend core**
+  - `app/identika/app.py` - сборка FastAPI, шаблоны, статика, middleware.
+  - `app/identika/api/routes.py` - HTML + JSON эндпоинты, no-cache для динамики.
+  - `app/identika/models.py` - Pydantic-модели job/result/slide/rich/export.
+  - `app/identika/storage.py` - SQLite + asset storage, удаление jobs.
+- **Services**
+  - `app/identika/services/jobs.py` - оркестрация generation/approve/re-render/export/upload.
+  - `app/identika/services/rendering.py` - рендер SVG/HTML/PDF/ZIP и профили quality (`preview`/`final`).
+  - `app/identika/services/product_images.py` - загрузка фото товара, warnings, fallback.
+  - `app/identika/services/uploads.py` - валидация multipart фото.
+  - `app/identika/services/wb_tool.py` и `wb_cdn.py` - интеграция WB Tool/CDN.
+- **Providers**
+  - `app/identika/providers/mock.py` - офлайн генерация.
+  - `app/identika/providers/openrouter.py` + `image_gen.py` + `prompts.py` - OpenRouter text/image слой.
+- **UI/templates**
+  - `app/identika/templates/index.html` - dashboard.
+  - `app/identika/templates/create.html` - создание + upload/режим без фото.
+  - `app/identika/templates/job.html` - approve/export/rich/upload/delete + редактирование слайдов.
+  - `app/identika/static/app.css` - дизайн-система кабинета.
+- **Tests**
+  - `tests/test_api.py`, `tests/test_generation.py`, `tests/test_rebrand_settings.py`, `tests/test_source_photos.py` и др.
+
+## Ключевые маршруты и workflow
+
+### HTML/UI
+
+- `GET /` - dashboard.
+- `GET /create` - запуск генерации.
+- `GET /jobs/{job_id}` - рабочая страница job.
+- `GET /settings`, `POST /settings`, `POST /settings/test` - провайдер/ключ/модели.
+- `POST /jobs/{job_id}/delete` - удаление job.
+- `POST /jobs/{job_id}/slides/{slide_index}/text` + `/reset` - правка/сброс текста.
+- `POST /jobs/{job_id}/slides/{slide_index}/image/clear` - очистка изображения слайда.
+- `POST /jobs/{job_id}/source-images` - дозагрузка фото в существующий job.
+- `POST /jobs/{job_id}/upload-to-wb` - отправка approved пакета в WB Tool.
+
+### JSON/API
+
+- `GET /health`.
+- `POST /v1/uploads/source-images`.
+- `POST /v1/generation/jobs`, `GET /v1/generation/jobs`, `GET /v1/generation/jobs/{job_id}`.
+- `GET /v1/generation/jobs/{job_id}/result`.
+- `PATCH /v1/generation/jobs/{job_id}/result/text`.
+- `POST /v1/generation/jobs/{job_id}/source-images`.
+- `POST /v1/generation/jobs/{job_id}/re-render`.
+- `POST /v1/generation/jobs/{job_id}/approve`.
+- `GET /v1/generation/jobs/{job_id}/export`.
+- `GET /v1/generation/jobs/{job_id}/rich-export`.
+- `GET /v1/assets/{asset_id}`.
+
+### Бизнес-флоу
+
+1. **Generate**: создать job через `/create` или `/v1/generation/jobs` (+ фото или режим без фото).  
+2. **Preview/Edit**: отредактировать тексты/картинки, rerender.  
+3. **Approve**: `POST /v1/generation/jobs/{job_id}/approve` переключает профиль качества в `final`.  
+4. **Export**: `export` и `rich-export` доступны после approve.  
+5. **Upload**: `POST /jobs/{job_id}/upload-to-wb`; при `501` во внешнем WB Tool переход в staging-сценарий.
+
+## Прод/деплой и caveats
+
+- Текущий прод: `https://eurasia-transline.online/identika/` (nginx reverse proxy).
+- Деплой: `SSHPASS=... ./scripts/deploy_vps.sh` (rsync, reinstall, restart systemd, правка nginx).
+- Важное:
+  - Нужен `IDENTIKA_PUBLIC_BASE_PATH=/identika`.
+  - Динамика должна быть без кеша (`proxy_no_cache`, `proxy_cache_bypass` + app headers `no-store`).
+  - Используется общий Basic Auth WB Tool; отдельный `IDENTIKA_UI_PASSWORD` обычно не задается.
+  - `scripts/deploy_vps.sh` использует `SSHPASS`; держать только в env, не коммитить.
+
+## Свежие крупные изменения (актуально для этой ветки)
+
+- UI-редизайн кабинета (dashboard/create/job) и улучшенная навигация действий.
+- Добавлены delete-действия для job и действия редактирования/сброса контента слайдов.
+- Guard для генерации без фото и явные подсказки/валидации при загрузке source images.
+- Выделен rich-export (`/v1/generation/jobs/{job_id}/rich-export`) и rich-зона в UI.
+- Финализация качества: после approve используется `final` quality profile для экспорта.
+
+## Известные проблемы, TODO и ближайшие приоритеты
+
+- Внешний `POST /api/ai/jobs/{id}/upload` в WB Tool может возвращать `501`; upload ограничен staging-сценарием.
+- Нужен полноценный E2E с реальным OpenRouter (latency/cost/стабильность изображений).
+- Нужны стабильные UI visual regression tests (desktop + mobile).
+- Подчистить и стабилизировать текущие изменения в рабочих файлах перед релизом.
+
+## Локальный запуск и тесты
 
 ```bash
 cd /Users/home/Downloads/Identika
@@ -27,173 +111,23 @@ pip install -e ".[dev]"
 uvicorn identika.app:create_app --factory --app-dir app --host 127.0.0.1 --port 8787
 ```
 
-UI: `http://127.0.0.1:8787`
-
-Быстрая проверка:
+Проверка:
 
 ```bash
 curl http://127.0.0.1:8787/health
 pytest
 ```
 
-Docker-вариант:
+Docker:
 
 ```bash
 docker compose up --build
 ```
 
-## Текущее локальное состояние
+## Правила для следующего ИИ
 
-На момент среза:
-
-- Проект инициализирован как git-репозиторий (`.gitignore` исключает `data/`, `assets/`, `.env`).
-- БД: `data/identika.sqlite`.
-- Ассеты: `assets/`.
-- `pytest`: 48+ тестов (generation, API, UI smoke, upload, WB Tool integration, OpenRouter mock, WB upload/staging, settings/rebrand, WB CDN, rerender).
-- GitHub Actions CI: `.github/workflows/ci.yml`.
-
-Не удалять `data/` и `assets/`: это текущая рабочая история и экспортные файлы.
-
-## Основная архитектура
-
-Ключевые файлы:
-
-- `app/identika/app.py` - создание FastAPI-приложения, templates/static, JobService.
-- `app/identika/api/routes.py` - HTML и JSON API маршруты.
-- `app/identika/models.py` - Pydantic-схема продукта, слайдов, rich-пакета, jobs.
-- `app/identika/storage.py` - SQLite storage и файловые ассеты.
-- `app/identika/services/jobs.py` - orchestration генерации, ререндер ассетов, approve/edit.
-- `app/identika/services/rendering.py` - SVG/PDF/HTML/ZIP renderer.
-- `app/identika/services/wb_tool.py` - клиент WB Tool.
-- `app/identika/providers/mock.py` - локальный mock provider.
-- `app/identika/providers/openrouter.py` - OpenRouter text provider поверх mock renderer.
-- `app/identika/providers/prompts.py` - visual/text prompts для OpenRouter (text-free AI backgrounds).
-- `app/identika/services/product_images.py` - скачивание WB CDN фото в локальные ассеты.
-- `app/identika/services/wb_cdn.py` - URL-кандидаты для фото WB.
-- `app/identika/ui_labels.py` - русские подписи статусов jobs.
-- `app/identika/providers/image_gen.py` - OpenRouter image generation layer.
-- `app/identika/services/uploads.py` - multipart upload validation.
-- `app/identika/middleware.py` - optional API key + UI basic auth.
-- `app/identika/templates/` - Jinja UI.
-- `app/identika/static/app.css` - текущая дизайн-система.
-- `tests/test_generation.py` - regression tests для генерации, ZIP, approve, secret hygiene и text patch.
-
-## Текущий UI
-
-Уже сделано:
-
-- `base.html` с верхней навигацией, footer и общей оболочкой.
-- `index.html` — dashboard: метрики (готово/в работе/ошибки), проекты с русскими статусами, quick actions.
-- `settings.html` — провайдер mock/openrouter, маскированный ключ, модели, тест ключа (БД > env, без рестарта).
-- `create.html` — drag-and-drop upload, loading на submit.
-- `job.html` — блок «Информация о генерации» (warnings vs info), пересборка слайдов, scaled SVG preview.
-- `app.css` — WB Tool стиль (indigo/slate/Inter), mobile burger, slide preview без crop.
-- `routes.py` — `/settings`, `POST /jobs/{id}/re-render`, Cache-Control no-store на динамике.
-
-Важно: продолжать дизайн как рабочий кабинет, а не маркетинговый лендинг.
-
-## API surface
-
-HTML:
-
-- `GET /` - dashboard.
-- `GET /create` - создание проекта.
-- `GET /jobs/{job_id}` - страница результата.
-- `POST /demo` - demo job.
-- `POST /wb/generate` - создать job из WB Tool product context.
-- `POST /jobs/{job_id}/slides/{slide_index}/text` - форма редактирования текста слайда.
-- `GET /settings` — страница настроек (провайдер, ключ, модели).
-- `POST /settings`, `POST /settings/test` — сохранение и проверка OpenRouter.
-- `POST /jobs/{job_id}/re-render` — пересборка SVG с актуальными фото.
-
-JSON/API:
-
-- `GET /health`
-- `POST /v1/uploads/source-images` — multipart, до 4 фото, max 10MB каждое
-- `POST /v1/generation/jobs`
-- `GET /v1/generation/jobs`
-- `GET /v1/generation/jobs/{job_id}`
-- `GET /v1/generation/jobs/{job_id}/result`
-- `PATCH /v1/generation/jobs/{job_id}/result/text`
-- `POST /v1/generation/jobs/{job_id}/approve`
-- `GET /v1/generation/jobs/{job_id}/export`
-- `POST /jobs/{job_id}/upload-to-wb` - upload в WB Tool.
-- `POST /v1/generation/jobs/{job_id}/re-render` - JSON rerender.
-
-## Настройки окружения
-
-Все настройки читаются из env и `.env` через `pydantic-settings`.
-
-Основные переменные (см. `.env.example`):
-
-- `IDENTIKA_PROVIDER=mock` или `openrouter`.
-- `IDENTIKA_HOST=127.0.0.1`
-- `IDENTIKA_PORT=8787`
-- `IDENTIKA_DB_PATH=./data/identika.sqlite`
-- `IDENTIKA_ASSETS_DIR=./assets`
-- `WB_TOOL_BASE_URL=http://127.0.0.1:8765`
-- `IDENTIKA_PUBLIC_BASE_PATH=`
-- `OPENROUTER_API_KEY=`
-- `OPENROUTER_TEXT_MODEL=google/gemini-3.1-flash-lite-preview`
-- `OPENROUTER_IMAGE_MODEL=google/gemini-3.1-flash-image-preview`
-- `IDENTIKA_ENABLE_AI_IMAGES=` — пусто = auto (true при `openrouter`, false при `mock`)
-- `IDENTIKA_API_KEY=` — если задан, все `/v1/*` требуют `X-API-Key` или `Authorization: Bearer`
-- `IDENTIKA_UI_PASSWORD=` — optional basic auth для HTML UI
-
-Runbook для заказчика:
-
-1. Скопировать `.env.example` → `.env`, оставить `IDENTIKA_PROVIDER=mock` для офлайн-демо.
-2. Для AI: `IDENTIKA_PROVIDER=openrouter`, задать `OPENROUTER_API_KEY`, при необходимости `IDENTIKA_ENABLE_AI_IMAGES=true`.
-3. Для production на VPS: единый nginx Basic Auth (WB Tool), **не** задавать `IDENTIKA_UI_PASSWORD`; настройки OpenRouter можно править в UI `/settings`.
-4. Деплой: `SSHPASS=... ./scripts/deploy_vps.sh` (rsync + restart + nginx no-cache для `/identika/`).
-
-Не коммитить и не вписывать реальные секреты в документацию.
-
-## Что было решено по продукту
-
-- Цель - клон/аналог визуального направления АИдентика для WB product card generator.
-- Внутреннюю валюту/балансы не делать.
-- Главный сценарий: продавец выбирает товар WB, добавляет brief, получает 10 слайдов и rich-пакет.
-- Секреты WB/B2B/OpenRouter не должны уходить в результат, ZIP, manifest или логи.
-- UI должен быть похож на современный личный кабинет Aidentika, с реальными локальными метриками, а не декоративной промо-страницей.
-
-## WB Tool интеграция (Step 1)
-
-Identika → WB Tool (`WB_TOOL_BASE_URL`, по умолчанию `http://127.0.0.1:8765`):
-
-| Метод | Путь | Назначение |
-|-------|------|------------|
-| GET | `/api/ai/accounts` | Список магазинов |
-| GET | `/api/ai/products` | Каталог SKU (`account_id`, `q`, `limit`) |
-| GET | `/api/ai/products/{sku_id}/context` | Контекст для генерации (сейчас часто `images: []`) |
-| GET | `/api/ai/products/{sku_id}/media` \| `/images` \| `/photos` | Опционально: Identika пробует при пустом `images` |
-| POST | `/api/ai/jobs/{job_id}/upload` | Выгрузка approve-пакета (в WB Tool сейчас **501**) |
-| POST | `/api/ai/jobs/{job_id}/upload/staging` | Зарезервировано: очередь на pull ZIP + manifest |
-
-Фото товара: `context.images` → опциональные media-роуты → CDN probe (`wb_cdn.discover_wb_image_urls`) → ручная загрузка на `/create`.
-
-Upload payload (`build_upload_payload`): `contract_version`, `account_id`, `nm_id`, `sku_id`, `export_url`, `manifest_url`, inline `manifest`, список `assets` с публичными URL.
-
-При **501** от upload Identika редиректит `?upload=staging` (ZIP готов, ждём реализацию upload в WB Tool). При ошибке сети — `?upload=error&upload_detail=…`.
-
-## Известные ограничения
-
-- WB upload зависит от внешнего WB Tool; пока `POST …/upload` в WB Tool возвращает 501 — только staging + Export ZIP.
-- OpenRouter image generation требует API key и может частично падать → fallback на programmatic SVG с warning.
-- Async jobs (BackgroundTasks) включаются только при `openrouter` + `IDENTIKA_ENABLE_AI_IMAGES`; mock остаётся синхронным.
-- Browser/UI visual regression tests не автоматизированы.
-
-## Рекомендуемый следующий шаг
-
-1. Реализовать в WB Tool `POST /api/ai/jobs/{id}/upload` (и опционально `/upload/staging`) + заполнение `images` в `/context` из Content API.
-2. Прогнать end-to-end с живым OpenRouter и замерить latency/cost на 10 image calls.
-3. Добавить browser visual regression для create/job flow.
-
-## Правила для следующего инструмента
-
-- Не удалять существующие `data/identika.sqlite` и `assets/`.
-- Не переписывать проект с нуля: текущая архитектура уже рабочая.
-- Сохранять plain local MVP: mock mode должен всегда работать без внешних сервисов.
-- Любое подключение внешних провайдеров делать опциональным через env.
-- Перед изменением storage/schema добавить миграционную логику или совместимость со старой БД.
-- После изменений запускать `pytest`; для UI-изменений дополнительно проверять браузером desktop и mobile ширину.
+- Не удалять `data/identika.sqlite` и `assets/`.
+- Не коммитить секреты (`.env`, API keys, пароли, `SSHPASS`).
+- Не ломать offline `mock` сценарий.
+- Изменения storage/schema делать с совместимостью по старым данным.
+- После кода прогонять `pytest`; после UI-правок проверять в браузере.
