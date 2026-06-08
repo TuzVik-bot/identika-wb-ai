@@ -125,5 +125,6 @@ async def discover_wb_image_urls(
         timeout=12.0,
         follow_redirects=True,
         headers=_PROBE_HEADERS,
+        trust_env=False,
     ) as owned:
         return await _probe(owned)

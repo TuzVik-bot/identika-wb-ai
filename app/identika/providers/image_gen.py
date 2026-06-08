@@ -103,7 +103,7 @@ async def _call_image_model(
         "messages": [{"role": "user", "content": content}],
         "modalities": ["image", "text"],
     }
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=120.0, trust_env=False) as client:
         response = await client.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers=_headers(eff),

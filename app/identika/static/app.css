@@ -2025,6 +2025,102 @@ code {
   margin-top: -6px;
 }
 
+.templates-page {
+  max-width: 1120px;
+}
+
+.templates-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
+  gap: 18px;
+}
+
+.templates-list {
+  display: grid;
+  gap: 14px;
+  padding: 24px;
+}
+
+.templates-list h2 {
+  margin-bottom: 0;
+  font-size: 18px;
+}
+
+.template-card {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+
+.template-preview {
+  position: relative;
+  min-height: 200px;
+  border: 3px solid var(--template-accent, var(--accent));
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.template-preview::before {
+  content: "";
+  position: absolute;
+  inset: 18px;
+  border: 1px solid color-mix(in srgb, var(--template-accent, var(--accent)) 35%, #fff);
+}
+
+.template-preview__title,
+.template-preview__photo {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  display: block;
+}
+
+.template-preview__title {
+  top: 22px;
+  color: var(--template-accent, var(--accent));
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.template-preview__photo {
+  bottom: 24px;
+  padding: 28px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  color: var(--text-soft);
+  font-size: 12px;
+  text-align: center;
+  background: #f8fafc;
+}
+
+.template-card dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.template-card dl div {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.template-card dt {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.template-card dd {
+  margin: 0;
+  font-weight: 700;
+}
+
 .info-list {
   padding-left: 18px;
   margin: 0;

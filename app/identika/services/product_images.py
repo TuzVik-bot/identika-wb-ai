@@ -252,6 +252,7 @@ async def download_product_images(
         timeout=30.0,
         follow_redirects=True,
         headers=DOWNLOAD_HEADERS,
+        trust_env=False,
     ) as client:
         if needs_cdn_fallback:
             product = await ensure_product_image_urls_async(product, client=client)

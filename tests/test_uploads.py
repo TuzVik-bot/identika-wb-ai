@@ -5,6 +5,7 @@ import zipfile
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from identika.app import create_app
 from identika.config import settings
@@ -78,5 +79,6 @@ def test_job_with_source_images_references_asset_in_svg(tmp_path) -> None:
     assert "ТОВАР" not in svg
     export_path, _ = storage.get_asset(job.result.export_asset_id)
     with zipfile.ZipFile(export_path) as zf:
-        exported = zf.read("slides/slide_01.svg").decode("utf-8")
-    assert "data:image/png;base64," in exported
+        exported = Image.open(io.BytesIO(zf.read("slides/slide_01.png")))
+    assert exported.format == "PNG"
+    assert exported.size == (900, 1200)

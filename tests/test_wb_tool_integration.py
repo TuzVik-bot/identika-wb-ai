@@ -51,9 +51,12 @@ def test_build_upload_payload_includes_manifest_and_urls(tmp_path) -> None:
     assert payload["nm_id"] == 2002
     assert payload["manifest"]["slides"]
     assert payload["rich_assets"]
-    assert any(item["kind"] == "rich_block" for item in payload["rich_assets"])
+    rich_block = next(item for item in payload["rich_assets"] if item["kind"] == "rich_block")
+    assert rich_block["media_type"] == "image/png"
+    assert rich_block["width"] == 1440
+    assert rich_block["height"] == 900
     assert any(item["kind"] == "rich_zip" for item in payload["rich_assets"])
-    assert any(item["kind"] == "rich_html" for item in payload["rich_assets"])
+    assert not any(item["kind"] == "rich_html" for item in payload["rich_assets"])
     assert any(item["kind"] == "rich_pdf" for item in payload["rich_assets"])
     assert payload["export_url"].startswith("https://example.com/identika")
     assert payload["manifest_url"].endswith("/result")

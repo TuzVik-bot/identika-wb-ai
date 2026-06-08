@@ -8,8 +8,8 @@
 
 Identika WB AI - локальный FastAPI-сервис для генерации медиа карточки Wildberries:
 
-- 10 слайдов (SVG) по контексту товара.
-- Rich-пакет (HTML + PDF + rich-блоки + отдельный rich ZIP).
+- 10 слайдов по контексту товара: SVG остаётся для UI-preview, скачиваемый export содержит PNG 900x1200.
+- Rich-пакет (PNG-блоки 1440x900 + PDF preview + отдельный rich ZIP; HTML остаётся только внутренним preview в UI).
 - ZIP-экспорт финального пакета с `manifest.json`.
 - История jobs и ассетов в SQLite + файловом хранилище.
 - UI-кабинет: dashboard, настройки, создание, страница job.

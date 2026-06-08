@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Шаблоны · Identika{% endblock %}
+
+{% block content %}
+<section class="settings-page templates-page" aria-labelledby="templates-title">
+  <header class="surface-card settings-hero">
+    <p class="eyebrow">Категорийные пресеты</p>
+    <h1 id="templates-title">Шаблоны</h1>
+    <p class="text-muted">Настройте формат для категории товара: расположение заголовка, рамку, акцентный цвет и обработку квадратных фото. При генерации шаблон подбирается по категории WB или названию товара.</p>
+    {% if saved %}
+    <p class="notice notice--success">Шаблон сохранён.</p>
+    {% endif %}
+  </header>
+
+  <div class="templates-grid">
+    <section class="surface-card settings-form">
+      <h2>Новый или существующий шаблон</h2>
+      <form method="post" action="{{ base_path }}/templates">
+        <label class="field">
+          ID шаблона
+          <input name="template_id" value="cable-default" required>
+        </label>
+        <label class="field">
+          Название
+          <input name="name" value="Кабель: техно-рамка" required>
+        </label>
+        <label class="field">
+          Категория или слово в названии
+          <input name="category" value="кабель" required>
+        </label>
+        <label class="field">
+          Акцентный цвет
+          <input type="color" name="accent_color" value="#0f766e">
+        </label>
+        <label class="field">
+          Рамка
+          <select name="frame_style">
+            <option value="accent">Акцентная</option>
+            <option value="thin">Тонкая</option>
+            <option value="none">Без рамки</option>
+          </select>
+        </label>
+        <label class="field">
+          Заголовок
+          <select name="title_position">
+            <option value="left">Слева</option>
+            <option value="top">Сверху</option>
+            <option value="bottom">Снизу</option>
+          </select>
+        </label>
+        <label class="field">
+          Квадратное фото
+          <select name="photo_treatment">
+            <option value="expand_square">Дорастянуть фон под 900×1200</option>
+            <option value="fit">Просто вписать</option>
+          </select>
+        </label>
+        <div class="settings-actions">
+          <button type="submit" class="button button--accent">Сохранить шаблон</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="surface-card templates-list">
+      <h2>Активные шаблоны</h2>
+      {% for template in templates %}
+      <article class="template-card">
+        <div class="template-preview" style="--template-accent: {{ template.accent_color }}">
+          <span class="template-preview__title">{{ template.name }}</span>
+          <span class="template-preview__photo">Фото товара</span>
+        </div>
+        <dl>
+          <div><dt>Категория</dt><dd>{{ template.category }}</dd></div>
+          <div><dt>Заголовок</dt><dd>{{ template.title_position }}</dd></div>
+          <div><dt>Рамка</dt><dd>{{ template.frame_style }}</dd></div>
+          <div><dt>Фото</dt><dd>{{ template.photo_treatment }}</dd></div>
+        </dl>
+      </article>
+      {% endfor %}
+    </section>
+  </div>
+</section>
+{% endblock %}

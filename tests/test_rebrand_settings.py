@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import io
+import zipfile
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from identika.app import create_app
 from identika.config import EffectiveSettings, settings
@@ -325,6 +328,7 @@ def test_rerender_job_rebuilds_svg_with_embedded_images(tmp_path, monkeypatch) -
 
     rerendered = asyncio.run(service.rerender_job(job.id))
     export_path, _ = storage.get_asset(rerendered.result.export_asset_id)
-    with __import__("zipfile").ZipFile(export_path) as zf:
-        exported = zf.read("slides/slide_01.svg").decode("utf-8")
-    assert "data:image/png;base64," in exported
+    with zipfile.ZipFile(export_path) as zf:
+        exported = Image.open(io.BytesIO(zf.read("slides/slide_01.png")))
+    assert exported.format == "PNG"
+    assert exported.size == (900, 1200)

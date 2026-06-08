@@ -29,6 +29,10 @@
         <span aria-hidden="true">▣</span>
         <span>Все проекты</span>
       </a>
+      <a class="topbar__link {% if active_page == 'templates' %}is-active{% endif %}" href="{{ base_path }}/templates">
+        <span aria-hidden="true">◧</span>
+        <span>Шаблоны</span>
+      </a>
       <a class="topbar__link {% if active_page == 'settings' %}is-active{% endif %}" href="{{ base_path }}/settings">
         <span aria-hidden="true">⚙</span>
         <span>Настройки</span>
@@ -54,6 +58,7 @@
     <span>© 2026 Identika</span>
     <nav aria-label="Сервисные ссылки">
       <a href="{{ base_path }}/settings">Настройки</a>
+      <a href="{{ base_path }}/templates">Шаблоны</a>
       <a href="{{ base_path }}/create">Создать проект</a>
       <a href="{{ base_path }}/#projects">Проекты</a>
     </nav>

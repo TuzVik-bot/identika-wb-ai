@@ -128,3 +128,29 @@ def test_edit_flow_with_accordion(client: TestClient) -> None:
     assert "Инновационный Свет" in updated.text
     assert "7 ярких режимов проекции" in updated.text
     assert "Встроенный таймер" in updated.text
+
+
+def test_templates_page_saves_category_template(client: TestClient) -> None:
+    page = client.get("/templates")
+    assert page.status_code == 200
+    assert "Шаблоны" in page.text
+    assert "Кабель: техно-рамка" in page.text
+
+    saved = client.post(
+        "/templates",
+        data={
+            "template_id": "case-default",
+            "name": "Чехол: чистая карточка",
+            "category": "чехол",
+            "accent_color": "#2563eb",
+            "frame_style": "thin",
+            "title_position": "top",
+            "photo_treatment": "fit",
+        },
+    )
+    assert saved.status_code == 303
+
+    updated = client.get("/templates")
+    assert updated.status_code == 200
+    assert "Чехол: чистая карточка" in updated.text
+    assert "чехол" in updated.text

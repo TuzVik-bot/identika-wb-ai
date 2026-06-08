@@ -45,6 +45,9 @@ def build_upload_payload(job: JobRecord, public_base_url: str = "") -> dict[str,
                     "kind": "rich_block",
                     "index": block.index,
                     "asset_id": block.asset_id,
+                    "media_type": "image/png",
+                    "width": 1440,
+                    "height": 900,
                     "url": f"{base}/v1/assets/{block.asset_id}" if base else f"/v1/assets/{block.asset_id}",
                 }
             )
@@ -57,18 +60,6 @@ def build_upload_payload(job: JobRecord, public_base_url: str = "") -> dict[str,
                     f"{base}/v1/assets/{result.rich.cover_asset_id}"
                     if base
                     else f"/v1/assets/{result.rich.cover_asset_id}"
-                ),
-            }
-        )
-    if result.rich.html_asset_id:
-        rich_assets.append(
-            {
-                "kind": "rich_html",
-                "asset_id": result.rich.html_asset_id,
-                "url": (
-                    f"{base}/v1/assets/{result.rich.html_asset_id}"
-                    if base
-                    else f"/v1/assets/{result.rich.html_asset_id}"
                 ),
             }
         )
@@ -212,7 +203,7 @@ class WBToolClient:
         self.base_url = (base_url or settings.wb_tool_base_url).rstrip("/")
 
     async def accounts(self) -> list[dict[str, Any]]:
-        async with httpx.AsyncClient(timeout=20.0) as client:
+        async with httpx.AsyncClient(timeout=20.0, trust_env=False) as client:
             response = await client.get(f"{self.base_url}/api/ai/accounts")
         response.raise_for_status()
         return response.json().get("items", [])
@@ -223,7 +214,7 @@ class WBToolClient:
             params["account_id"] = account_id
         if q:
             params["q"] = q
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
             response = await client.get(f"{self.base_url}/api/ai/products", params=params)
         response.raise_for_status()
         return response.json()
@@ -232,7 +223,7 @@ class WBToolClient:
         params: dict[str, Any] = {}
         if account_id:
             params["account_id"] = account_id
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
             response = await client.get(
                 f"{self.base_url}/api/ai/products/{sku_id}/context",
                 params=params,
@@ -245,7 +236,7 @@ class WBToolClient:
         params: dict[str, Any] = {}
         if account_id:
             params["account_id"] = account_id
-        async with httpx.AsyncClient(timeout=20.0) as client:
+        async with httpx.AsyncClient(timeout=20.0, trust_env=False) as client:
             for segment in _PRODUCT_IMAGE_PATHS:
                 url = f"{self.base_url}/api/ai/products/{sku_id}/{segment}"
                 try:
@@ -315,7 +306,7 @@ class WBToolClient:
         Fallback (501): POST /api/ai/jobs/{job_id}/upload/staging with export_url + manifest
         """
         payload = build_upload_payload(job, public_base_url)
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
             response = await client.post(
                 f"{self.base_url}/api/ai/jobs/{job.id}/upload",
                 json=payload,

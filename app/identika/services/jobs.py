@@ -16,6 +16,7 @@ from identika.models import (
     TextBlock,
 )
 from identika.providers.openrouter import get_provider
+from identika.services.category_templates import find_template_for_product
 from identika.services.product_images import (
     attach_source_images,
     download_product_images,
@@ -29,7 +30,9 @@ from identika.services.rendering import (
     build_export_zip,
     image_to_data_uri,
     render_pdf_preview,
+    render_rich_block_image,
     render_rich_html_preview,
+    render_slide_image,
     render_slide_svg,
 )
 from identika.storage import Storage
@@ -204,6 +207,7 @@ class JobService:
     ) -> GenerationResult:
         result = self._validate_rich_content(result)
         result.quality_mode = quality_mode
+        category_template = find_template_for_product(self.storage, result.product)
         source_hrefs_web = self._source_image_hrefs(result, embed=False)
         source_hrefs_export = self._source_image_hrefs(result, embed=True)
         asset_blobs: dict[str, bytes] = {}
@@ -223,10 +227,11 @@ class JobService:
             export_source, export_background = self._render_slide_hrefs(
                 slide, source_hrefs_export, embed=True
             )
-            export_blobs[asset_id] = render_slide_svg(
+            export_blobs[asset_id] = render_slide_image(
                 slide,
                 source_image_href=export_source,
                 background_image_href=export_background,
+                category_template=category_template,
             )
         if result.slides:
             source_href, background_href = self._render_slide_hrefs(
@@ -251,24 +256,19 @@ class JobService:
             )
         for block in result.rich.blocks:
             source = result.slides[min(block.index - 1, len(result.slides) - 1)]
-            source_href, background_href = self._render_slide_hrefs(source, source_hrefs_web, embed=False)
-            data = render_slide_svg(
-                source,
-                source_image_href=source_href,
-                background_image_href=background_href,
-            )
-            block.asset_id = self.storage.add_asset(
-                job_id, f"rich_block_{block.index:02d}.svg", data, "image/svg+xml"
-            )
-            asset_blobs[block.asset_id] = data
-            export_source, export_background = self._render_slide_hrefs(
+            export_source, _export_background = self._render_slide_hrefs(
                 source, source_hrefs_export, embed=True
             )
-            export_blobs[block.asset_id] = render_slide_svg(
-                source,
+            data = render_rich_block_image(
+                block,
+                result.product,
                 source_image_href=export_source,
-                background_image_href=export_background,
             )
+            block.asset_id = self.storage.add_asset(
+                job_id, f"rich_block_{block.index:02d}.png", data, "image/png"
+            )
+            asset_blobs[block.asset_id] = data
+            export_blobs[block.asset_id] = data
         pdf = render_pdf_preview(result)
         result.rich.pdf_asset_id = self.storage.add_asset(job_id, "rich_preview.pdf", pdf, "application/pdf")
         asset_blobs[result.rich.pdf_asset_id] = pdf
@@ -294,6 +294,13 @@ class JobService:
             "Режим качества: "
             + ("preview (до approve)" if quality_mode == "preview" else "finalize WB export (после approve)")
         )
+        result.info = [
+            item
+            for item in result.info
+            if "Шаблон категории:" not in item
+        ]
+        if category_template:
+            result.info.append(f"Шаблон категории: {category_template.name}")
         return result
 
     def update_slide_text(self, job_id: str, slide_index: int, update: SlideTextUpdate) -> JobRecord:

@@ -9,6 +9,11 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from identika import __version__
 from identika.config import EffectiveSettings, mask_api_key, settings
 from identika.models import CreateJobRequest, ProductContext, ResultTextPatch, SlideTextUpdate
+from identika.services.category_templates import (
+    list_category_templates,
+    save_category_template,
+    template_from_form,
+)
 from identika.services.jobs import JobService
 from identika.services.product_images import (
     SourcePhotosRequiredError,
@@ -199,7 +204,7 @@ async def test_settings(request: Request) -> RedirectResponse:
     if not eff.openrouter_api_key.strip():
         return RedirectResponse(url=url("/settings?test=missing_key"), status_code=303)
     try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
+        async with httpx.AsyncClient(timeout=20.0, trust_env=False) as client:
             response = await client.get(
                 "https://openrouter.ai/api/v1/models",
                 headers={
@@ -215,6 +220,31 @@ async def test_settings(request: Request) -> RedirectResponse:
             status_code=303,
         )
     return RedirectResponse(url=url("/settings?test=ok"), status_code=303)
+
+
+@router.get("/templates", response_class=HTMLResponse)
+async def templates_page(request: Request) -> HTMLResponse:
+    return apply_no_cache(
+        request.app.state.templates.TemplateResponse(
+            request,
+            "templates.html",
+            {
+                "base_path": settings.public_base_path,
+                "active_page": "templates",
+                "page_title": "Шаблоны",
+                "templates": list_category_templates(service(request).storage),
+                "saved": request.query_params.get("saved") == "ok",
+            },
+        )
+    )
+
+
+@router.post("/templates")
+async def save_template_page(request: Request) -> RedirectResponse:
+    form = await request.form()
+    data = {str(key): str(value) for key, value in form.items()}
+    save_category_template(service(request).storage, template_from_form(data))
+    return RedirectResponse(url=url("/templates?saved=ok"), status_code=303)
 
 
 @router.get("/create", response_class=HTMLResponse)

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import zipfile
+
+from PIL import Image
 
 from identika.config import settings
 from identika.models import CreateJobRequest, ProductContext, ProductImage, ResultTextPatch
 from identika.providers.mock import MockProvider
+from identika.services.category_templates import CategoryTemplate, save_category_template
 from identika.services.jobs import JobService
 from identika.storage import Storage
 
@@ -142,8 +146,9 @@ def test_job_service_slide_svg_references_product_image_not_placeholder(tmp_path
 
     export_path, _ = storage.get_asset(rendered.export_asset_id)
     with zipfile.ZipFile(export_path) as zf:
-        exported_svg = zf.read("slides/slide_01.svg").decode("utf-8")
-    assert "data:image/png;base64," in exported_svg
+        exported_image = Image.open(io.BytesIO(zf.read("slides/slide_01.png")))
+    assert exported_image.format == "PNG"
+    assert exported_image.size == (900, 1200)
 
 
 def test_job_service_exports_assets_pdf_manifest_and_zip(tmp_path) -> None:
@@ -169,12 +174,19 @@ def test_job_service_exports_assets_pdf_manifest_and_zip(tmp_path) -> None:
         names = set(zf.namelist())
         assert "manifest.json" in names
         assert "rich/preview.pdf" in names
-        assert "rich/preview.html" in names
-        assert "slides/slide_01.svg" in names
-        assert "slides/slide_10.svg" in names
+        assert "rich/preview.html" not in names
+        assert "rich/block_01.png" in names
+        assert "slides/slide_01.png" in names
+        assert "slides/slide_10.png" in names
+        assert not any(n.startswith("slides/") and n.endswith(".svg") for n in names)
+        slide_image = Image.open(io.BytesIO(zf.read("slides/slide_01.png")))
+        assert slide_image.format == "PNG"
+        assert slide_image.size == (900, 1200)
+        rich_image = Image.open(io.BytesIO(zf.read("rich/block_01.png")))
+        assert rich_image.size == (1440, 900)
 
 
-def test_rich_zip_html_uses_relative_paths_not_server_urls(tmp_path) -> None:
+def test_rich_zip_exports_png_blocks_not_html(tmp_path) -> None:
     storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
     service = JobService(storage)
 
@@ -190,13 +202,65 @@ def test_rich_zip_html_uses_relative_paths_not_server_urls(tmp_path) -> None:
     rich_zip_path, _ = storage.get_asset(job.result.rich.zip_asset_id)
     with zipfile.ZipFile(rich_zip_path) as zf:
         names = set(zf.namelist())
-        assert "rich/preview.html" in names
-        assert any(n.startswith("rich/block_") and n.endswith(".svg") for n in names)
-        html_content = zf.read("rich/preview.html").decode("utf-8")
+        assert "rich/preview.html" not in names
+        assert "rich/block_01.png" in names
+        assert not any(n.startswith("rich/block_") and n.endswith(".html") for n in names)
+        assert not any(n.startswith("rich/block_") and n.endswith(".svg") for n in names)
+        image = Image.open(io.BytesIO(zf.read("rich/block_01.png")))
+        assert image.format == "PNG"
+        assert image.size == (1440, 900)
 
-    # HTML in the ZIP must use relative paths so it works when opened from disk
-    assert "/v1/assets/" not in html_content
-    assert "./block_01.svg" in html_content or "block_01.svg" in html_content
+
+def test_category_template_applies_to_export_and_square_photo_is_preserved(tmp_path) -> None:
+    square_buffer = io.BytesIO()
+    Image.new("RGB", (32, 32), "#22c55e").save(square_buffer, format="PNG")
+    square_png = square_buffer.getvalue()
+    storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
+    save_category_template(
+        storage,
+        CategoryTemplate(
+            id="cable-test",
+            name="Кабель тест",
+            category="кабель",
+            accent_color="#0f766e",
+            frame_style="accent",
+            title_position="left",
+            photo_treatment="expand_square",
+        ),
+    )
+    service = JobService(storage)
+    job = storage.create_job(
+        CreateJobRequest(product=ProductContext(title="USB кабель")).model_dump(mode="json")
+    )
+    source_id = storage.add_asset(job.id, "square.png", square_png, "image/png")
+    source_path, _ = storage.get_asset(source_id)
+    original_bytes = source_path.read_bytes()
+    result = asyncio.run(
+        MockProvider().generate(
+            CreateJobRequest(
+                product=ProductContext(
+                    title="USB кабель",
+                    subject_name="Кабель",
+                    images=[ProductImage(asset_id=source_id, role="source")],
+                )
+            )
+        )
+    )
+    result.product = ProductContext(
+        title="USB кабель",
+        subject_name="Кабель",
+        images=[ProductImage(asset_id=source_id, role="source")],
+    )
+
+    rendered = service._render_assets(job.id, result)
+
+    assert "Шаблон категории: Кабель тест" in rendered.info
+    assert source_path.read_bytes() == original_bytes
+    export_path, _ = storage.get_asset(rendered.export_asset_id)
+    with zipfile.ZipFile(export_path) as zf:
+        image = Image.open(io.BytesIO(zf.read("slides/slide_06.png")))
+    assert image.format == "PNG"
+    assert image.size == (900, 1200)
 
 
 def test_approve_only_after_success(tmp_path) -> None:

@@ -111,12 +111,12 @@
     <article class="metric-card metric-card--accent">
       <strong>{{ job.result.slides|length }}</strong>
       <span>Слайдов</span>
-      <small>WB media pack</small>
+      <small>PNG 900×1200 export</small>
     </article>
     <article class="metric-card">
       <strong>{{ job.result.rich.blocks|length }}</strong>
       <span>Rich-блоков</span>
-      <small>HTML + PDF preview</small>
+      <small>PNG 1440×900 + PDF preview</small>
     </article>
     <article class="metric-card metric-card--dark">
       <strong>{% if job.result.export_asset_id %}ZIP{% else %}—{% endif %}</strong>
@@ -319,9 +319,8 @@
                 <h4>Содержимое пакета</h4>
                 <ul class="package-files-list">
                   <li>📄 <code>manifest.json</code></li>
-                  <li>🖼️ 10 слайдов (SVG)</li>
-                  <li>📝 {{ job.result.rich.blocks|length }} Rich-блоков</li>
-                  <li>📊 <code>preview.html</code></li>
+                  <li>🖼️ 10 слайдов PNG 900×1200</li>
+                  <li>🖼️ {{ job.result.rich.blocks|length }} Rich-блоков PNG 1440×900</li>
                   <li>📕 <code>preview.pdf</code></li>
                   <li>📦 <code>rich_export.zip</code></li>
                 </ul>
