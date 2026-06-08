@@ -46,6 +46,12 @@ export SSHPASS='<tbot password>'
 ./scripts/deploy_vps.sh
 ```
 
+Проверка команд без подключения к серверу и без копирования файлов:
+
+```bash
+DRY_RUN=1 ./scripts/deploy_vps.sh
+```
+
 Ручной рестарт на сервере: `sudo systemctl restart identika`.
 
 Nginx для `/identika/`: не кэшировать динамику (`proxy_no_cache 1; proxy_cache_bypass 1;`), не использовать отдельный `auth_basic "Identika"` — только общий вход сайта. Статика `/identika/static/` без пароля. В `.env` не задавать `IDENTIKA_UI_PASSWORD`.

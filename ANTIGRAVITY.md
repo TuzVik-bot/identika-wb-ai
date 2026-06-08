@@ -79,7 +79,7 @@ Identika WB AI - локальный FastAPI-сервис для генераци
 ## Прод/деплой и caveats
 
 - Текущий прод: `https://eurasia-transline.online/identika/` (nginx reverse proxy).
-- Деплой: `SSHPASS=... ./scripts/deploy_vps.sh` (rsync, reinstall, restart systemd, правка nginx).
+- Деплой: `SSHPASS=... ./scripts/deploy_vps.sh` (rsync, reinstall, restart systemd, правка nginx); `DRY_RUN=1 ./scripts/deploy_vps.sh` печатает план без SSH/rsync.
 - Важное:
   - Нужен `IDENTIKA_PUBLIC_BASE_PATH=/identika`.
   - Динамика должна быть без кеша (`proxy_no_cache`, `proxy_cache_bypass` + app headers `no-store`).
