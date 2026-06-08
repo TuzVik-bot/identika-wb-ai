@@ -374,6 +374,23 @@ class JobService:
             self.storage.update_result(job_id, job.result)
         return self.storage.approve(job_id)
 
+    def apply_category_template(self, job_id: str, template_id: str | None) -> JobRecord:
+        job = self.storage.get_job(job_id)
+        if not job.result:
+            raise ValueError("job has no result")
+        clean = (template_id or "").strip()
+        if clean:
+            template = get_category_template(self.storage, clean)
+            if template is None:
+                raise ValueError("category template not found")
+            job.result.category_template_id = template.id
+        else:
+            job.result.category_template_id = None
+        quality_mode: QualityMode = "final" if job.status == "approved" else "preview"
+        job.result = self._render_assets(job_id, job.result, quality_mode=quality_mode)
+        self.storage.update_result(job_id, job.result)
+        return self.storage.get_job(job_id)
+
     async def rerender_job(self, job_id: str) -> JobRecord:
         """Re-download missing product photos and re-render slide SVGs (fixes broken embeds)."""
         job = self.storage.get_job(job_id)

@@ -317,9 +317,25 @@ async def job_page(request: Request, job_id: str) -> HTMLResponse:
                 "upload_status": upload_status,
                 "upload_detail": upload_detail,
                 "missing_source_photos": missing_source_photos,
+                "category_templates": list_category_template_views(service(request).storage),
             },
         )
     )
+
+
+@router.post("/jobs/{job_id}/template")
+async def apply_job_template_page(
+    request: Request,
+    job_id: str,
+    category_template_id: str = Form(""),
+) -> RedirectResponse:
+    try:
+        service(request).apply_category_template(job_id, category_template_id.strip() or None)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="job not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(url=url(f"/jobs/{job_id}?template=applied"), status_code=303)
 
 
 @router.post("/jobs/{job_id}/re-render")

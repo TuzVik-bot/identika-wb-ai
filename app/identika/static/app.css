@@ -668,6 +668,40 @@ button:disabled,
   color: var(--text-soft);
 }
 
+.job-template-switcher {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+
+.job-template-switcher label {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.job-template-switcher__controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.job-template-switcher select {
+  min-width: 0;
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--text);
+  padding: 0 12px;
+}
+
 .job-generation-meta__warnings,
 .job-generation-meta__info {
   padding-top: 12px;

@@ -87,6 +87,9 @@ def test_redesigned_job_page_elements(client: TestClient) -> None:
     assert "✎" in page_html
     assert "Очистить текст" in page_html
     assert "Очистить картинку" in page_html
+    assert "job-template-select" in page_html
+    assert "Шаблон карточки" in page_html
+    assert "/template" in page_html
     assert "button--danger-outline" in page_html
     assert "Удалить проект" in page_html
     assert 'class="button button--danger"' in page_html
@@ -179,6 +182,25 @@ def test_create_page_keeps_selected_category_template(client: TestClient) -> Non
     assert 'value="cable-default" selected' in page.text
     assert 'name="category_template_id" class="category-template-id-field" value="cable-default"' in page.text
     assert "/wb/generate" in page.text
+
+
+def test_job_page_applies_category_template(client: TestClient) -> None:
+    demo = client.post("/demo")
+    job_id = _job_id_from_location(demo.headers["location"])
+    page = client.get(f"/jobs/{job_id}")
+    assert page.status_code == 200
+    assert 'id="job-template-select" name="category_template_id"' in page.text
+
+    applied = client.post(
+        f"/jobs/{job_id}/template",
+        data={"category_template_id": "cable-default"},
+    )
+    assert applied.status_code == 303
+    assert applied.headers["location"] == f"/jobs/{job_id}?template=applied"
+
+    updated = client.get(applied.headers["location"])
+    assert "value=\"cable-default\" selected" in updated.text
+    assert "Шаблон категории: Кабель: техно-рамка" in updated.text
 
 
 def test_templates_page_deletes_custom_but_not_builtin_template(client: TestClient) -> None:

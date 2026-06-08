@@ -340,6 +340,66 @@ def test_category_template_id_overrides_auto_category_match(tmp_path) -> None:
     assert rich.size == (1440, 900)
 
 
+def test_apply_category_template_rerenders_existing_job(tmp_path) -> None:
+    storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
+    save_category_template(
+        storage,
+        CategoryTemplate(
+            id="manual-light",
+            name="Ручной свет",
+            category="свет",
+            keywords=["ночник"],
+            accent_color="#b45309",
+            frame_style="accent",
+            title_position="bottom",
+            photo_treatment="expand_square",
+        ),
+    )
+    service = JobService(storage)
+    job = asyncio.run(
+        service.create_job(
+            CreateJobRequest(
+                product=ProductContext(title="Планшет iPad Pro"),
+                allow_generate_without_photos=True,
+            )
+        )
+    )
+    assert job.result is not None
+    assert job.result.category_template_id == "electronics-default"
+
+    updated = service.apply_category_template(job.id, "manual-light")
+
+    assert updated.result is not None
+    assert updated.result.category_template_id == "manual-light"
+    assert "Шаблон категории: Ручной свет" in updated.result.info
+    slide_path, _ = storage.get_asset(updated.result.slides[0].asset_id)
+    assert "data:image/png;base64," in slide_path.read_text()
+
+
+def test_apply_category_template_preserves_final_quality_for_approved_job(tmp_path) -> None:
+    storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
+    service = JobService(storage)
+    job = asyncio.run(
+        service.create_job(
+            CreateJobRequest(
+                product=ProductContext(title="Ночник-проектор"),
+                allow_generate_without_photos=True,
+            )
+        )
+    )
+    approved = service.approve(job.id)
+    assert approved.status == "approved"
+    assert approved.result is not None
+    assert approved.result.quality_mode == "final"
+
+    updated = service.apply_category_template(job.id, "cable-default")
+
+    assert updated.status == "approved"
+    assert updated.result is not None
+    assert updated.result.category_template_id == "cable-default"
+    assert updated.result.quality_mode == "final"
+
+
 def test_approve_only_after_success(tmp_path) -> None:
     storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
     service = JobService(storage)

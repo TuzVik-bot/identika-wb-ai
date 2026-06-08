@@ -86,6 +86,20 @@
         {% if job.result.model %} · {{ job.result.model }}{% endif %}
       </p>
     </div>
+    <form class="job-template-switcher" method="post" action="{{ base_path }}/jobs/{{ job.id }}/template">
+      <label for="job-template-select">Шаблон карточки</label>
+      <div class="job-template-switcher__controls">
+        <select id="job-template-select" name="category_template_id">
+          <option value="">Автоподбор по товару</option>
+          {% for template in category_templates %}
+          <option value="{{ template.id }}" {% if job.result.category_template_id == template.id %}selected{% endif %}>
+            {{ template.name }}{% if template.is_builtin %} · встроенный{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="button button--ghost">Применить</button>
+      </div>
+    </form>
     {% if job.result.warnings %}
     <div class="job-generation-meta__warnings">
       <h3>Предупреждения</h3>
