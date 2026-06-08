@@ -1433,6 +1433,10 @@ code {
   .settings-test-form .button {
     width: 100%;
   }
+
+  .templates-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 760px) {
@@ -2153,12 +2157,6 @@ code {
 .template-card dd {
   margin: 0;
   font-weight: 700;
-}
-
-@media (max-width: 900px) {
-  .templates-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 640px) {
