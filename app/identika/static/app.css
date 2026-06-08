@@ -2155,6 +2155,23 @@ code {
   font-weight: 700;
 }
 
+@media (max-width: 900px) {
+  .templates-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .template-card,
+  .template-card__editor form:first-of-type {
+    grid-template-columns: 1fr;
+  }
+
+  .template-copy-btn {
+    grid-column: 1;
+  }
+}
+
 .info-list {
   padding-left: 18px;
   margin: 0;
