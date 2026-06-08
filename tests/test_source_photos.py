@@ -16,10 +16,13 @@ from identika.storage import Storage
 
 
 def _png_bytes() -> bytes:
-    return bytes.fromhex(
-        "89504e470d0a1a0a0000000d49484452000000010000000108020000009077"
-        "530000000a49444154789c6260000000020001e221bc330000000049454e44ae426082"
-    )
+    from io import BytesIO
+
+    from PIL import Image
+
+    buf = BytesIO()
+    Image.new("RGB", (1, 1), "#ffffff").save(buf, format="PNG")
+    return buf.getvalue()
 
 
 @pytest.fixture()

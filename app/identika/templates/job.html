@@ -69,7 +69,7 @@
     <p><strong>Нет исходных фото товара.</strong> Слайды показывают заглушку «Загрузите фото товара» — не экспортируйте пакет, пока не добавите реальные фото.</p>
     <form class="job-source-upload" method="post" action="{{ base_path }}/jobs/{{ job.id }}/source-images" enctype="multipart/form-data">
       <label class="field">Загрузить фото
-        <input type="file" name="files" accept="image/*" multiple required>
+        <input type="file" name="files" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple required>
       </label>
       <button type="submit" class="button button--accent">Прикрепить и пересобрать слайды</button>
     </form>

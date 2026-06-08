@@ -27,10 +27,15 @@ def client(tmp_path, monkeypatch) -> TestClient:
 
 
 def _png_bytes() -> bytes:
-    return bytes.fromhex(
-        "89504e470d0a1a0a0000000d49484452000000010000000108020000009077"
-        "530000000a49444154789c6260000000020001e221bc330000000049454e44ae426082"
-    )
+    buf = io.BytesIO()
+    Image.new("RGB", (1, 1), "#ffffff").save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _jpeg_bytes() -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", (1, 1), "#ffffff").save(buf, format="JPEG")
+    return buf.getvalue()
 
 
 def test_upload_rejects_too_many_files(client: TestClient) -> None:
@@ -47,6 +52,34 @@ def test_upload_rejects_invalid_mime(client: TestClient) -> None:
     )
     assert response.status_code == 400
     assert "unsupported image type" in response.json()["detail"]
+
+
+def test_upload_rejects_webp_and_gif(client: TestClient) -> None:
+    for filename, content_type in (("photo.webp", "image/webp"), ("photo.gif", "image/gif")):
+        response = client.post(
+            "/v1/uploads/source-images",
+            files=[("files", (filename, _png_bytes(), content_type))],
+        )
+        assert response.status_code == 400
+        assert "unsupported image type" in response.json()["detail"]
+
+
+def test_upload_rejects_mime_content_mismatch(client: TestClient) -> None:
+    response = client.post(
+        "/v1/uploads/source-images",
+        files=[("files", ("photo.jpg", _png_bytes(), "image/jpeg"))],
+    )
+    assert response.status_code == 400
+    assert "does not match declared type" in response.json()["detail"]
+
+
+def test_upload_accepts_jpeg(client: TestClient) -> None:
+    response = client.post(
+        "/v1/uploads/source-images",
+        files=[("files", ("photo.jpg", _jpeg_bytes(), "image/jpeg"))],
+    )
+    assert response.status_code == 200
+    assert len(response.json()["asset_ids"]) == 1
 
 
 def test_upload_success_returns_asset_ids(client: TestClient) -> None:
