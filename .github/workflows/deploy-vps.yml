@@ -1,0 +1,103 @@
+name: Deploy VPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      rerender_jobs:
+        description: "Re-render existing jobs after deploy"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deploy tools
+        run: sudo apt-get update && sudo apt-get install -y sshpass rsync
+
+      - name: Deploy app
+        env:
+          VPS_HOST: ${{ secrets.IDENTIKA_VPS_HOST }}
+          VPS_PORT: ${{ secrets.IDENTIKA_VPS_PORT }}
+          VPS_USER: ${{ secrets.IDENTIKA_VPS_USER }}
+          SSHPASS: ${{ secrets.IDENTIKA_VPS_PASSWORD }}
+          REMOTE_APP: /home/tbot/identika
+        run: |
+          set -euo pipefail
+          : "${VPS_HOST:?missing IDENTIKA_VPS_HOST}"
+          : "${VPS_PORT:?missing IDENTIKA_VPS_PORT}"
+          : "${VPS_USER:?missing IDENTIKA_VPS_USER}"
+          : "${SSHPASS:?missing IDENTIKA_VPS_PASSWORD}"
+
+          SSH_E=(ssh -o StrictHostKeyChecking=no -o LogLevel=ERROR -p "$VPS_PORT")
+          RSYNC_E=(ssh -o StrictHostKeyChecking=no -o LogLevel=ERROR -p "$VPS_PORT")
+          STAMP="$(date +%F-%H%M)"
+
+          run_ssh() {
+            sshpass -e "${SSH_E[@]}" "$VPS_USER@$VPS_HOST" "$@"
+          }
+
+          run_sudo() {
+            local remote_cmd="$1"
+            printf '%s\n' "$SSHPASS" | sshpass -e "${SSH_E[@]}" "$VPS_USER@$VPS_HOST" \
+              "sudo -S -p '' bash -lc $(printf '%q' "$remote_cmd")"
+          }
+
+          run_rsync() {
+            sshpass -e rsync "$@"
+          }
+
+          echo "Deploying Identika to $VPS_HOST:$VPS_PORT"
+          run_ssh "mkdir -p /home/tbot/backups && cp /home/tbot/.identika/identika.sqlite /home/tbot/backups/identika-predeploy-$STAMP.sqlite 2>/dev/null || true"
+
+          run_rsync -az --delete \
+            --exclude='__pycache__' --exclude='*.pyc' --exclude='*.egg-info' \
+            -e "${RSYNC_E[*]}" \
+            app/identika/ \
+            "$VPS_USER@$VPS_HOST:$REMOTE_APP/app/identika/"
+
+          run_rsync -az -e "${RSYNC_E[*]}" pyproject.toml "$VPS_USER@$VPS_HOST:$REMOTE_APP/pyproject.toml"
+          run_rsync -az -e "${RSYNC_E[*]}" scripts/ "$VPS_USER@$VPS_HOST:$REMOTE_APP/scripts/"
+
+          run_ssh "cd $REMOTE_APP && .venv/bin/pip install -q ."
+          run_sudo "systemctl restart identika"
+          run_ssh "sleep 3"
+
+          run_sudo "sed -i '/auth_basic \"Identika\";/d' /etc/nginx/sites-available/wb-tool 2>/dev/null || true"
+          run_sudo "sed -i '/auth_basic_user_file \\/etc\\/nginx\\/identika.htpasswd;/d' /etc/nginx/sites-available/wb-tool 2>/dev/null || true"
+          if ! run_ssh "grep -q 'proxy_no_cache 1;' /etc/nginx/sites-available/wb-tool 2>/dev/null"; then
+            run_sudo "sed -i '/location \\/identika\\/ {/a\\        proxy_no_cache 1;\\n        proxy_cache_bypass 1;' /etc/nginx/sites-available/wb-tool"
+          fi
+          run_sudo "rm -f /etc/nginx/identika.htpasswd 2>/dev/null || true"
+          run_sudo "nginx -t"
+          run_sudo "systemctl reload nginx"
+
+          run_ssh "grep -q '^IDENTIKA_UI_PASSWORD=' $REMOTE_APP/.env 2>/dev/null && sed -i '/^IDENTIKA_UI_PASSWORD=/d' $REMOTE_APP/.env || true"
+          run_ssh "curl -sf http://127.0.0.1:8787/health"
+
+      - name: Re-render existing jobs
+        if: ${{ inputs.rerender_jobs == 'true' }}
+        env:
+          VPS_HOST: ${{ secrets.IDENTIKA_VPS_HOST }}
+          VPS_PORT: ${{ secrets.IDENTIKA_VPS_PORT }}
+          VPS_USER: ${{ secrets.IDENTIKA_VPS_USER }}
+          SSHPASS: ${{ secrets.IDENTIKA_VPS_PASSWORD }}
+        run: |
+          set -euo pipefail
+          sshpass -e ssh -o StrictHostKeyChecking=no -o LogLevel=ERROR -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            "cd /home/tbot/identika && .venv/bin/python scripts/rerender_jobs.py"
+
+      - name: Public health check
+        env:
+          BASIC_USER: ${{ secrets.IDENTIKA_BASIC_USER }}
+          BASIC_PASSWORD: ${{ secrets.IDENTIKA_BASIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          curl -fsS -u "$BASIC_USER:$BASIC_PASSWORD" https://eurasia-transline.online/identika/health
+          curl -fsS -u "$BASIC_USER:$BASIC_PASSWORD" https://eurasia-transline.online/identika/templates | grep -q 'data-live-preview'
