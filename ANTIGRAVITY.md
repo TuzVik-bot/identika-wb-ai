@@ -97,8 +97,8 @@ Identika WB AI - локальный FastAPI-сервис для генераци
 ## Известные проблемы, TODO и ближайшие приоритеты
 
 - Внешний `POST /api/ai/jobs/{id}/upload` в WB Tool может возвращать `501`; upload ограничен staging-сценарием.
-- Нужен полноценный E2E с реальным OpenRouter (latency/cost/стабильность изображений).
-- Нужны стабильные UI visual regression tests (desktop + mobile).
+- Реальный OpenRouter E2E подготовлен как opt-in live-smoke: `RUN_OPENROUTER_E2E=1 pytest -q tests/test_openrouter_live.py`; image-модель отдельно через `RUN_OPENROUTER_IMAGE_E2E=1`.
+- Есть базовые UI visual regression contracts для desktop/mobile в `tests/test_ui_visual_contracts.py`; полноценные браузерные screenshot baseline можно добавить позже.
 - Подчистить и стабилизировать текущие изменения в рабочих файлах перед релизом.
 
 ## Локальный запуск и тесты

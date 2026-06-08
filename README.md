@@ -59,6 +59,28 @@ Nginx для `/identika/`: не кэшировать динамику (`proxy_no
 
 Без OpenRouter-ключа при `IDENTIKA_PROVIDER=openrouter` сервис автоматически работает как `mock`.
 
+## Проверки
+
+Базовый локальный прогон:
+
+```bash
+pytest -q
+```
+
+Live-smoke реального OpenRouter выключен по умолчанию, чтобы не делать платные
+внешние вызовы в обычном CI. Запуск текстовой генерации + проверки ZIP:
+
+```bash
+export OPENROUTER_API_KEY='<openrouter key>'
+RUN_OPENROUTER_E2E=1 pytest -q tests/test_openrouter_live.py
+```
+
+Отдельная проверка image-модели дороже и включается вторым флагом:
+
+```bash
+RUN_OPENROUTER_E2E=1 RUN_OPENROUTER_IMAGE_E2E=1 pytest -q tests/test_openrouter_live.py
+```
+
 ## API
 
 - `GET /health`

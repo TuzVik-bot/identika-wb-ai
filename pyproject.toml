@@ -25,6 +25,7 @@ pythonpath = ["app"]
 testpaths = ["tests"]
 markers = [
     "no_photo_inject: disable autouse product photo injection for source-photo tests",
+    "live_openrouter: opt-in tests that call the real OpenRouter API",
 ]
 
 [tool.setuptools]
