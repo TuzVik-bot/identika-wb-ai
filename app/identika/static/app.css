@@ -2057,6 +2057,40 @@ code {
   background: var(--surface-soft);
 }
 
+.template-card__editor {
+  grid-column: 1 / -1;
+  padding-top: 4px;
+}
+
+.template-card__editor summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.template-card__editor form:first-of-type {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.template-card__editor form + form,
+.template-card__editor .text-muted {
+  margin-top: 12px;
+}
+
+.template-card__actions {
+  display: flex;
+  align-items: end;
+}
+
+.template-copy-btn {
+  grid-column: 2;
+  width: fit-content;
+}
+
 .template-preview {
   position: relative;
   min-height: 200px;

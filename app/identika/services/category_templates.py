@@ -26,6 +26,10 @@ class CategoryTemplate(BaseModel):
     photo_treatment: PhotoTreatment = "expand_square"
 
 
+class CategoryTemplateView(CategoryTemplate):
+    is_builtin: bool = False
+
+
 DEFAULT_TEMPLATES = [
     CategoryTemplate(
         id="cable-default",
@@ -62,12 +66,46 @@ def list_category_templates(storage: Storage) -> list[CategoryTemplate]:
     return templates or list(DEFAULT_TEMPLATES)
 
 
-def save_category_template(storage: Storage, template: CategoryTemplate) -> None:
+def list_category_template_views(storage: Storage) -> list[CategoryTemplateView]:
+    builtin_ids = {item.id for item in DEFAULT_TEMPLATES}
+    return [
+        CategoryTemplateView(**item.model_dump(), is_builtin=item.id in builtin_ids)
+        for item in list_category_templates(storage)
+    ]
+
+
+def save_category_template(storage: Storage, template: CategoryTemplate) -> bool:
+    builtin_ids = {_normalize(item.id) for item in DEFAULT_TEMPLATES}
+    if _normalize(template.id) in builtin_ids:
+        return False
     templates = [item for item in list_category_templates(storage) if item.id != template.id]
     templates.append(template)
     storage.set_settings(
         {SETTINGS_KEY: json.dumps([item.model_dump() for item in templates], ensure_ascii=False)}
     )
+    return True
+
+
+def delete_category_template(storage: Storage, template_id: str) -> bool:
+    clean = _normalize(template_id)
+    builtin_ids = {_normalize(item.id) for item in DEFAULT_TEMPLATES}
+    if clean in builtin_ids:
+        return False
+    current = list_category_templates(storage)
+    templates = [item for item in current if _normalize(item.id) != clean]
+    if len(templates) == len(current):
+        return False
+    storage.set_settings(
+        {SETTINGS_KEY: json.dumps([item.model_dump() for item in templates], ensure_ascii=False)}
+    )
+    return True
+
+
+def get_category_template(storage: Storage, template_id: str | None) -> CategoryTemplate | None:
+    if not template_id:
+        return None
+    clean = _normalize(template_id)
+    return next((item for item in list_category_templates(storage) if _normalize(item.id) == clean), None)
 
 
 def template_from_form(data: dict[str, str]) -> CategoryTemplate:

@@ -11,6 +11,18 @@
     {% if saved %}
     <p class="notice notice--success">Шаблон сохранён.</p>
     {% endif %}
+    {% if save_error == 'builtin' %}
+    <p class="notice notice--error">Встроенный ID защищён. Сохраните копию под новым ID, например <code>cable-custom</code>.</p>
+    {% endif %}
+    {% if deleted %}
+    <p class="notice notice--success">Шаблон удалён.</p>
+    {% endif %}
+    {% if delete_error == 'builtin' %}
+    <p class="notice notice--error">Встроенный шаблон нельзя удалить. Его можно изменить и сохранить под новым ID.</p>
+    {% endif %}
+    {% if delete_error == 'missing' %}
+    <p class="notice notice--error">Шаблон не найден или уже удалён.</p>
+    {% endif %}
   </header>
 
   <div class="templates-grid">
@@ -19,23 +31,23 @@
       <form method="post" action="{{ base_path }}/templates">
         <label class="field">
           ID шаблона
-          <input name="template_id" value="cable-default" required>
+          <input data-template-field="template_id" name="template_id" value="cable-custom" required>
         </label>
         <label class="field">
           Название
-          <input name="name" value="Кабель: техно-рамка" required>
+          <input data-template-field="name" name="name" value="Кабель: техно-рамка" required>
         </label>
         <label class="field">
           Категория или слово в названии
-          <input name="category" value="кабель" required>
+          <input data-template-field="category" name="category" value="кабель" required>
         </label>
         <label class="field">
           Акцентный цвет
-          <input type="color" name="accent_color" value="#0f766e">
+          <input data-template-field="accent_color" type="color" name="accent_color" value="#0f766e">
         </label>
         <label class="field">
           Рамка
-          <select name="frame_style">
+          <select data-template-field="frame_style" name="frame_style">
             <option value="accent">Акцентная</option>
             <option value="thin">Тонкая</option>
             <option value="none">Без рамки</option>
@@ -43,7 +55,7 @@
         </label>
         <label class="field">
           Заголовок
-          <select name="title_position">
+          <select data-template-field="title_position" name="title_position">
             <option value="left">Слева</option>
             <option value="top">Сверху</option>
             <option value="bottom">Снизу</option>
@@ -51,7 +63,7 @@
         </label>
         <label class="field">
           Квадратное фото
-          <select name="photo_treatment">
+          <select data-template-field="photo_treatment" name="photo_treatment">
             <option value="expand_square">Дорастянуть фон под 900×1200</option>
             <option value="fit">Просто вписать</option>
           </select>
@@ -76,9 +88,95 @@
           <div><dt>Рамка</dt><dd>{{ template.frame_style }}</dd></div>
           <div><dt>Фото</dt><dd>{{ template.photo_treatment }}</dd></div>
         </dl>
+        <button
+          type="button"
+          class="button button--ghost template-copy-btn"
+          data-template-id="{{ template.id }}"
+          data-template-name="{{ template.name }}"
+          data-template-category="{{ template.category }}"
+          data-template-accent-color="{{ template.accent_color }}"
+          data-template-frame-style="{{ template.frame_style }}"
+          data-template-title-position="{{ template.title_position }}"
+          data-template-photo-treatment="{{ template.photo_treatment }}"
+        >Взять за основу</button>
+        <details class="template-card__editor">
+          <summary>Редактировать</summary>
+          <form method="post" action="{{ base_path }}/templates">
+            <input type="hidden" name="template_id" value="{{ template.id }}">
+            <label class="field">Название
+              <input name="name" value="{{ template.name }}" required>
+            </label>
+            <label class="field">Категория
+              <input name="category" value="{{ template.category }}" required>
+            </label>
+            <label class="field">Цвет
+              <input type="color" name="accent_color" value="{{ template.accent_color }}">
+            </label>
+            <label class="field">Рамка
+              <select name="frame_style">
+                <option value="accent" {% if template.frame_style == 'accent' %}selected{% endif %}>Акцентная</option>
+                <option value="thin" {% if template.frame_style == 'thin' %}selected{% endif %}>Тонкая</option>
+                <option value="none" {% if template.frame_style == 'none' %}selected{% endif %}>Без рамки</option>
+              </select>
+            </label>
+            <label class="field">Заголовок
+              <select name="title_position">
+                <option value="left" {% if template.title_position == 'left' %}selected{% endif %}>Слева</option>
+                <option value="top" {% if template.title_position == 'top' %}selected{% endif %}>Сверху</option>
+                <option value="bottom" {% if template.title_position == 'bottom' %}selected{% endif %}>Снизу</option>
+              </select>
+            </label>
+            <label class="field">Квадратное фото
+              <select name="photo_treatment">
+                <option value="expand_square" {% if template.photo_treatment == 'expand_square' %}selected{% endif %}>Дорастянуть фон</option>
+                <option value="fit" {% if template.photo_treatment == 'fit' %}selected{% endif %}>Просто вписать</option>
+              </select>
+            </label>
+            <div class="template-card__actions">
+              <button type="submit" class="button button--accent">Сохранить</button>
+            </div>
+          </form>
+          {% if not template.is_builtin %}
+          <form method="post" action="{{ base_path }}/templates/{{ template.id }}/delete" onsubmit="return confirm('Удалить шаблон {{ template.name }}?');">
+            <button type="submit" class="button button--danger">Удалить шаблон</button>
+          </form>
+          {% else %}
+          <p class="text-muted">Встроенный шаблон защищён от удаления.</p>
+          {% endif %}
+        </details>
       </article>
       {% endfor %}
     </section>
   </div>
 </section>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const fields = Object.fromEntries(
+    Array.from(document.querySelectorAll('[data-template-field]')).map((field) => [
+      field.dataset.templateField,
+      field,
+    ])
+  );
+  const title = document.getElementById('templates-title');
+
+  function customId(id) {
+    if (!id) return 'custom-template';
+    return id.endsWith('-custom') ? id : `${id.replace(/-default$/, '')}-custom`;
+  }
+
+  document.querySelectorAll('.template-copy-btn').forEach((button) => {
+    button.addEventListener('click', () => {
+      fields.template_id.value = customId(button.dataset.templateId || '');
+      fields.name.value = `${button.dataset.templateName || 'Шаблон'} · копия`;
+      fields.category.value = button.dataset.templateCategory || '';
+      fields.accent_color.value = button.dataset.templateAccentColor || '#2563eb';
+      fields.frame_style.value = button.dataset.templateFrameStyle || 'thin';
+      fields.title_position.value = button.dataset.templateTitlePosition || 'top';
+      fields.photo_treatment.value = button.dataset.templatePhotoTreatment || 'expand_square';
+      title?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      fields.name.focus();
+    });
+  });
+});
+</script>
 {% endblock %}

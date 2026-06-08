@@ -16,7 +16,7 @@ from identika.models import (
     TextBlock,
 )
 from identika.providers.openrouter import get_provider
-from identika.services.category_templates import find_template_for_product
+from identika.services.category_templates import find_template_for_product, get_category_template
 from identika.services.product_images import (
     attach_source_images,
     download_product_images,
@@ -90,6 +90,7 @@ class JobService:
             provider = get_provider(self.storage)
             result = await provider.generate(request, eff)
             result.product = request.product
+            result.category_template_id = request.category_template_id
             if image_warnings:
                 result.warnings.extend(image_warnings)
             if eff.enable_ai_images and eff.effective_provider == "openrouter":
@@ -207,7 +208,12 @@ class JobService:
     ) -> GenerationResult:
         result = self._validate_rich_content(result)
         result.quality_mode = quality_mode
-        category_template = find_template_for_product(self.storage, result.product)
+        category_template = get_category_template(
+            self.storage,
+            result.category_template_id,
+        ) or find_template_for_product(self.storage, result.product)
+        if category_template:
+            result.category_template_id = category_template.id
         source_hrefs_web = self._source_image_hrefs(result, embed=False)
         source_hrefs_export = self._source_image_hrefs(result, embed=True)
         asset_blobs: dict[str, bytes] = {}

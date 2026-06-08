@@ -67,6 +67,16 @@
         <label class="field field--wide">Пожелания
           <textarea name="brief" rows="4" maxlength="2000" placeholder="Например: мягкий свет, минимализм, нейтральный фон.">{{ brief }}</textarea>
         </label>
+        <label class="field">Шаблон
+          <select id="category-template-select" name="category_template_id">
+            <option value="">Авто по категории</option>
+            {% for template in category_templates %}
+            <option value="{{ template.id }}" {% if category_template_id == template.id %}selected{% endif %}>
+              {{ template.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </label>
         <button type="submit" class="button button--dark">Получить товары с WB</button>
       </form>
 
@@ -103,6 +113,7 @@
           <input type="hidden" name="account_id" value="{{ selected_account_id }}">
           <input type="hidden" name="sku_id" value="{{ product.sku_id }}">
           <input type="hidden" name="brief" value="{{ brief }}">
+          <input type="hidden" name="category_template_id" class="category-template-id-field" value="{{ category_template_id }}">
           <input type="hidden" name="source_image_asset_ids" class="source-image-ids-field" value="">
           <input type="hidden" name="allow_generate_without_photos" class="allow-without-photos-field" value="">
           <button type="submit" class="button wb-generate-btn" disabled title="Сначала загрузите фото товара слева">Сгенерировать</button>
@@ -200,6 +211,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const generateFields = document.querySelectorAll('.source-image-ids-field');
   const allowCheckbox = document.getElementById('allow-generate-without-photos');
   const allowFields = document.querySelectorAll('.allow-without-photos-field');
+  const templateSelect = document.getElementById('category-template-select');
+  const templateFields = document.querySelectorAll('.category-template-id-field');
   const generateButtons = document.querySelectorAll('.wb-generate-btn');
   const basePath = {{ base_path|tojson }};
 
@@ -220,6 +233,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   allowCheckbox?.addEventListener('change', syncGenerateButtons);
   syncGenerateButtons();
+
+  function syncTemplateFields() {
+    templateFields.forEach((field) => {
+      field.value = templateSelect?.value || '';
+    });
+  }
+
+  templateSelect?.addEventListener('change', syncTemplateFields);
+  syncTemplateFields();
 
   document.querySelectorAll('[data-submit-loading]').forEach((form) => {
     form.addEventListener('submit', () => {

@@ -94,6 +94,7 @@ class GenerationResult(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     quality_mode: QualityMode = "preview"
     export_asset_id: str | None = None
+    category_template_id: str | None = None
 
 
 class CreateJobRequest(BaseModel):
@@ -103,6 +104,7 @@ class CreateJobRequest(BaseModel):
     outputs: list[str] = Field(default_factory=lambda: ["wb_10_slides", "rich_package"])
     source_image_asset_ids: list[str] = Field(default_factory=list)
     allow_generate_without_photos: bool = False
+    category_template_id: str | None = None
 
 
 class SlideTextUpdate(BaseModel):

@@ -263,6 +263,52 @@ def test_category_template_applies_to_export_and_square_photo_is_preserved(tmp_p
     assert image.size == (900, 1200)
 
 
+def test_category_template_id_overrides_auto_category_match(tmp_path) -> None:
+    storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
+    save_category_template(
+        storage,
+        CategoryTemplate(
+            id="manual-template",
+            name="Ручной шаблон",
+            category="чехол",
+            accent_color="#2563eb",
+            frame_style="thin",
+            title_position="bottom",
+            photo_treatment="fit",
+        ),
+    )
+    service = JobService(storage)
+    job = asyncio.run(
+        service.create_job(
+            CreateJobRequest(
+                product=product().model_copy(update={"subject_name": "Кабель"}),
+                allow_generate_without_photos=True,
+                category_template_id="manual-template",
+            )
+        )
+    )
+
+    assert job.result is not None
+    assert job.result.category_template_id == "manual-template"
+    assert "Шаблон категории: Ручной шаблон" in job.result.info
+    assert "Шаблон категории: Кабель: техно-рамка" not in job.result.info
+
+    export_path, _ = storage.get_asset(job.result.export_asset_id)
+    with zipfile.ZipFile(export_path) as zf:
+        names = set(zf.namelist())
+        assert "slides/slide_01.png" in names
+        assert "slides/slide_10.png" in names
+        assert "rich/block_01.png" in names
+        assert "rich/preview.html" not in names
+        assert not any(n.startswith("slides/") and n.endswith(".svg") for n in names)
+        slide = Image.open(io.BytesIO(zf.read("slides/slide_01.png")))
+        rich = Image.open(io.BytesIO(zf.read("rich/block_01.png")))
+    assert slide.format == "PNG"
+    assert slide.size == (900, 1200)
+    assert rich.format == "PNG"
+    assert rich.size == (1440, 900)
+
+
 def test_approve_only_after_success(tmp_path) -> None:
     storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
     service = JobService(storage)

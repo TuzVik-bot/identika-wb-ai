@@ -135,6 +135,10 @@ def test_templates_page_saves_category_template(client: TestClient) -> None:
     assert page.status_code == 200
     assert "Шаблоны" in page.text
     assert "Кабель: техно-рамка" in page.text
+    assert 'data-template-field="template_id" name="template_id" value="cable-custom"' in page.text
+    assert "template-copy-btn" in page.text
+    assert 'data-template-id="cable-default"' in page.text
+    assert "Взять за основу" in page.text
 
     saved = client.post(
         "/templates",
@@ -154,3 +158,100 @@ def test_templates_page_saves_category_template(client: TestClient) -> None:
     assert updated.status_code == 200
     assert "Чехол: чистая карточка" in updated.text
     assert "чехол" in updated.text
+
+
+def test_create_page_keeps_selected_category_template(client: TestClient) -> None:
+    page = client.get("/create?account_id=1&q=товар&brief=Светлый фон&category_template_id=cable-default")
+    assert page.status_code == 200
+    assert 'id="category-template-select" name="category_template_id"' in page.text
+    assert 'value="cable-default" selected' in page.text
+    assert 'name="category_template_id" class="category-template-id-field" value="cable-default"' in page.text
+    assert "/wb/generate" in page.text
+
+
+def test_templates_page_deletes_custom_but_not_builtin_template(client: TestClient) -> None:
+    created = client.post(
+        "/templates",
+        data={
+            "template_id": "delete-me",
+            "name": "Временный шаблон",
+            "category": "временный",
+            "accent_color": "#2563eb",
+            "frame_style": "thin",
+            "title_position": "top",
+            "photo_treatment": "fit",
+        },
+    )
+    assert created.status_code == 303
+    assert "Временный шаблон" in client.get("/templates").text
+
+    deleted = client.post("/templates/delete-me/delete")
+    assert deleted.status_code == 303
+    page = client.get(deleted.headers["location"])
+    assert "Шаблон удалён" in page.text
+    assert "Временный шаблон" not in page.text
+
+    blocked = client.post("/templates/cable-default/delete")
+    assert blocked.status_code == 303
+    page = client.get(blocked.headers["location"])
+    assert "Встроенный шаблон нельзя удалить" in page.text
+    assert "Кабель: техно-рамка" in page.text
+
+    missing = client.post("/templates/no-such-template/delete")
+    assert missing.status_code == 303
+    page = client.get(missing.headers["location"])
+    assert "Шаблон не найден или уже удалён" in page.text
+
+
+def test_templates_page_edits_existing_template(client: TestClient) -> None:
+    created = client.post(
+        "/templates",
+        data={
+            "template_id": "edit-me",
+            "name": "Старое имя",
+            "category": "старая",
+            "accent_color": "#2563eb",
+            "frame_style": "thin",
+            "title_position": "top",
+            "photo_treatment": "fit",
+        },
+    )
+    assert created.status_code == 303
+
+    edited = client.post(
+        "/templates",
+        data={
+            "template_id": "edit-me",
+            "name": "Новое имя",
+            "category": "новая",
+            "accent_color": "#0f766e",
+            "frame_style": "accent",
+            "title_position": "left",
+            "photo_treatment": "expand_square",
+        },
+    )
+    assert edited.status_code == 303
+    page = client.get("/templates")
+    assert "Новое имя" in page.text
+    assert "новая" in page.text
+    assert "Старое имя" not in page.text
+
+
+def test_templates_page_refuses_builtin_overwrite(client: TestClient) -> None:
+    response = client.post(
+        "/templates",
+        data={
+            "template_id": "cable-default",
+            "name": "Перезаписанный кабель",
+            "category": "сломанная",
+            "accent_color": "#2563eb",
+            "frame_style": "none",
+            "title_position": "bottom",
+            "photo_treatment": "fit",
+        },
+    )
+    assert response.status_code == 303
+    page = client.get(response.headers["location"])
+    assert "Встроенный ID защищён" in page.text
+    assert "Кабель: техно-рамка" in page.text
+    assert "Перезаписанный кабель" not in page.text

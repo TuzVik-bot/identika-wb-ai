@@ -10,7 +10,10 @@ from identika import __version__
 from identika.config import EffectiveSettings, mask_api_key, settings
 from identika.models import CreateJobRequest, ProductContext, ResultTextPatch, SlideTextUpdate
 from identika.services.category_templates import (
+    delete_category_template,
+    get_category_template,
     list_category_templates,
+    list_category_template_views,
     save_category_template,
     template_from_form,
 )
@@ -87,6 +90,7 @@ async def create_context(request: Request) -> dict:
     selected_account_id = request.query_params.get("account_id", "")
     q = request.query_params.get("q", "")
     brief = request.query_params.get("brief", "")
+    selected_template_id = request.query_params.get("category_template_id", "")
     try:
         wb = WBToolClient()
         accounts = await wb.accounts()
@@ -101,6 +105,8 @@ async def create_context(request: Request) -> dict:
         "selected_account_id": selected_account_id,
         "q": q,
         "brief": brief,
+        "category_template_id": selected_template_id,
+        "category_templates": list_category_templates(service(request).storage),
         "wb_error": wb_error,
         "wb_tool_base_url": settings.wb_tool_base_url,
     }
@@ -232,8 +238,11 @@ async def templates_page(request: Request) -> HTMLResponse:
                 "base_path": settings.public_base_path,
                 "active_page": "templates",
                 "page_title": "Шаблоны",
-                "templates": list_category_templates(service(request).storage),
+                "templates": list_category_template_views(service(request).storage),
                 "saved": request.query_params.get("saved") == "ok",
+                "save_error": request.query_params.get("save_error", ""),
+                "deleted": request.query_params.get("deleted") == "ok",
+                "delete_error": request.query_params.get("delete_error", ""),
             },
         )
     )
@@ -243,8 +252,20 @@ async def templates_page(request: Request) -> HTMLResponse:
 async def save_template_page(request: Request) -> RedirectResponse:
     form = await request.form()
     data = {str(key): str(value) for key, value in form.items()}
-    save_category_template(service(request).storage, template_from_form(data))
+    saved = save_category_template(service(request).storage, template_from_form(data))
+    if not saved:
+        return RedirectResponse(url=url("/templates?save_error=builtin"), status_code=303)
     return RedirectResponse(url=url("/templates?saved=ok"), status_code=303)
+
+
+@router.post("/templates/{template_id}/delete")
+async def delete_template_page(request: Request, template_id: str) -> RedirectResponse:
+    existing = get_category_template(service(request).storage, template_id)
+    deleted = delete_category_template(service(request).storage, template_id)
+    if not deleted:
+        error = "builtin" if existing else "missing"
+        return RedirectResponse(url=url(f"/templates?delete_error={error}"), status_code=303)
+    return RedirectResponse(url=url("/templates?deleted=ok"), status_code=303)
 
 
 @router.get("/create", response_class=HTMLResponse)
@@ -353,6 +374,7 @@ async def generate_from_wb(
     brief: str = Form(""),
     source_image_asset_ids: str = Form(""),
     allow_generate_without_photos: str = Form(""),
+    category_template_id: str = Form(""),
 ) -> RedirectResponse:
     try:
         wb = WBToolClient()
@@ -370,7 +392,11 @@ async def generate_from_wb(
         validate_can_start_generation(product, allow_without_photos=allow_without)
     except SourcePhotosRequiredError as exc:
         return RedirectResponse(
-            url=url(f"/create?account_id={account_id}&brief={quote(brief)}&photo_error={quote(str(exc))}"),
+            url=url(
+                f"/create?account_id={account_id}&brief={quote(brief)}"
+                f"&category_template_id={quote(category_template_id.strip())}"
+                f"&photo_error={quote(str(exc))}"
+            ),
             status_code=303,
         )
     try:
@@ -382,12 +408,17 @@ async def generate_from_wb(
                 outputs=["wb_10_slides", "rich_package"],
                 source_image_asset_ids=uploaded_ids,
                 allow_generate_without_photos=allow_without,
+                category_template_id=category_template_id.strip() or None,
             ),
             background_tasks=background_tasks,
         )
     except SourcePhotosRequiredError as exc:
         return RedirectResponse(
-            url=url(f"/create?account_id={account_id}&brief={quote(brief)}&photo_error={quote(str(exc))}"),
+            url=url(
+                f"/create?account_id={account_id}&brief={quote(brief)}"
+                f"&category_template_id={quote(category_template_id.strip())}"
+                f"&photo_error={quote(str(exc))}"
+            ),
             status_code=303,
         )
     return RedirectResponse(url=url(f"/jobs/{job.id}"), status_code=303)
