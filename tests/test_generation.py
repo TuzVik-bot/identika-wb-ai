@@ -141,8 +141,7 @@ def test_job_service_slide_svg_references_product_image_not_placeholder(tmp_path
     svg = slide_path.read_text(encoding="utf-8")
     assert "<image" in svg
     assert "ТОВАР" not in svg
-    assert f"/v1/assets/{source_id}" in svg
-    assert len(svg) < 200_000
+    assert "data:image/png;base64," in svg
 
     export_path, _ = storage.get_asset(rendered.export_asset_id)
     with zipfile.ZipFile(export_path) as zf:
@@ -261,6 +260,11 @@ def test_category_template_applies_to_export_and_square_photo_is_preserved(tmp_p
         image = Image.open(io.BytesIO(zf.read("slides/slide_06.png")))
     assert image.format == "PNG"
     assert image.size == (900, 1200)
+    slide_path, media_type = storage.get_asset(rendered.slides[0].asset_id)
+    assert media_type == "image/svg+xml"
+    slide_preview = slide_path.read_text()
+    assert "data:image/png;base64," in slide_preview
+    assert "#0f766e" not in slide_preview
 
 
 def test_category_template_id_overrides_auto_category_match(tmp_path) -> None:
@@ -408,9 +412,8 @@ def test_white_background_slides_use_product_photo_not_ai_background(tmp_path) -
     rendered = service._render_assets(job.id, result)
     slide6_path, _ = storage.get_asset(rendered.slides[5].asset_id)
     svg = slide6_path.read_text(encoding="utf-8")
-    assert f"/v1/assets/{source_id}" in svg
     assert "fake-ai-bg" not in svg
-    assert 'fill="#ffffff"' in svg
+    assert "data:image/png;base64," in svg
     assert "<image" in svg
 
 
@@ -439,8 +442,8 @@ def test_description_slides_use_primary_photo_not_gallery_rotation(tmp_path) -> 
     for slide in rendered.slides[1:5]:
         slide_path, _ = storage.get_asset(slide.asset_id)
         svg = slide_path.read_text(encoding="utf-8")
-        assert f"/v1/assets/{primary_id}" in svg
         assert f"/v1/assets/{wrong_id}" not in svg
+        assert "data:image/png;base64," in svg
 
 
 def test_description_slides_prefer_composite_over_ai_background(tmp_path) -> None:
@@ -465,9 +468,8 @@ def test_description_slides_prefer_composite_over_ai_background(tmp_path) -> Non
     rendered = service._render_assets(job.id, result)
     slide2_path, _ = storage.get_asset(rendered.slides[1].asset_id)
     svg = slide2_path.read_text(encoding="utf-8")
-    assert f"/v1/assets/{source_id}" in svg
     assert f"/v1/assets/{bg_id}" not in svg
-    assert 'width="560" height="320"' in svg
+    assert "data:image/png;base64," in svg
 
 
 def test_white_background_falls_back_to_ai_background_without_sources(tmp_path) -> None:
@@ -486,8 +488,8 @@ def test_white_background_falls_back_to_ai_background_without_sources(tmp_path) 
     rendered = service._render_assets(job.id, result)
     slide6_path, _ = storage.get_asset(rendered.slides[5].asset_id)
     svg = slide6_path.read_text(encoding="utf-8")
-    assert f"/v1/assets/{bg_id}" in svg
     assert "ТОВАР" not in svg
+    assert "data:image/png;base64," in svg
 
 
     from identika.providers.prompts import build_visual_prompt, should_skip_ai_image

@@ -214,25 +214,22 @@ class JobService:
         ) or find_template_for_product(self.storage, result.product)
         if category_template:
             result.category_template_id = category_template.id
-        source_hrefs_web = self._source_image_hrefs(result, embed=False)
         source_hrefs_export = self._source_image_hrefs(result, embed=True)
         asset_blobs: dict[str, bytes] = {}
         export_blobs: dict[str, bytes] = {}
         for slide in result.slides:
-            source_href, background_href = self._render_slide_hrefs(
-                slide, source_hrefs_web, embed=False
+            export_source, export_background = self._render_slide_hrefs(
+                slide, source_hrefs_export, embed=True
             )
             data = render_slide_svg(
                 slide,
-                source_image_href=source_href,
-                background_image_href=background_href,
+                source_image_href=export_source,
+                background_image_href=export_background,
+                category_template=category_template,
             )
             asset_id = self.storage.add_asset(job_id, f"slide_{slide.index:02d}.svg", data, "image/svg+xml")
             slide.asset_id = asset_id
             asset_blobs[asset_id] = data
-            export_source, export_background = self._render_slide_hrefs(
-                slide, source_hrefs_export, embed=True
-            )
             export_blobs[asset_id] = render_slide_image(
                 slide,
                 source_image_href=export_source,
@@ -240,25 +237,24 @@ class JobService:
                 category_template=category_template,
             )
         if result.slides:
-            source_href, background_href = self._render_slide_hrefs(
-                result.slides[0], source_hrefs_web, embed=False
+            export_source, export_background = self._render_slide_hrefs(
+                result.slides[0], source_hrefs_export, embed=True
             )
             cover_data = render_slide_svg(
                 result.slides[0],
-                source_image_href=source_href,
-                background_image_href=background_href,
+                source_image_href=export_source,
+                background_image_href=export_background,
+                category_template=category_template,
             )
             result.rich.cover_asset_id = self.storage.add_asset(
                 job_id, "rich_cover.svg", cover_data, "image/svg+xml"
             )
             asset_blobs[result.rich.cover_asset_id] = cover_data
-            export_source, export_background = self._render_slide_hrefs(
-                result.slides[0], source_hrefs_export, embed=True
-            )
             export_blobs[result.rich.cover_asset_id] = render_slide_svg(
                 result.slides[0],
                 source_image_href=export_source,
                 background_image_href=export_background,
+                category_template=category_template,
             )
         for block in result.rich.blocks:
             source = result.slides[min(block.index - 1, len(result.slides) - 1)]

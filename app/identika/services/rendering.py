@@ -595,6 +595,19 @@ def _render_missing_photo_state(slide: SlideSpec) -> bytes:
     return "\n".join(parts).encode("utf-8")
 
 
+def _render_png_preview_svg(slide: SlideSpec, png_data: bytes) -> bytes:
+    encoded = base64.b64encode(png_data).decode("ascii")
+    parts = [
+        _svg_open(slide.width, slide.height),
+        (
+            f'<image href="data:image/png;base64,{encoded}" x="0" y="0" '
+            f'width="{slide.width}" height="{slide.height}" preserveAspectRatio="xMidYMid meet"/>'
+        ),
+        "</svg>",
+    ]
+    return "\n".join(parts).encode("utf-8")
+
+
 def render_slide_svg(
     slide: SlideSpec,
     *,
@@ -602,26 +615,40 @@ def render_slide_svg(
     background_image_href: str | None = None,
     source_image_data_uri: str | None = None,
     background_image_data_uri: str | None = None,
+    category_template: CategoryTemplate | None = None,
 ) -> bytes:
-    if slide.image_cleared:
-        return _render_missing_photo_state(slide)
-
     source_image_href = source_image_href or source_image_data_uri
     background_image_href = background_image_href or background_image_data_uri
 
-    if slide.role == "white_background":
-        product_href = source_image_href or background_image_href
-        if product_href:
-            if slide.index == 10:
-                return _render_kit_contents_infographic(slide, product_href)
-            return _render_white_background(slide, product_href)
+    should_render_png_preview = category_template is not None or any(
+        href and href.startswith("data:image/")
+        for href in (source_image_href, background_image_href)
+    )
+    if not should_render_png_preview:
+        if slide.image_cleared:
+            return _render_missing_photo_state(slide)
+
+        if slide.role == "white_background":
+            product_href = source_image_href or background_image_href
+            if product_href:
+                if slide.index == 10:
+                    return _render_kit_contents_infographic(slide, product_href)
+                return _render_white_background(slide, product_href)
+            return _render_missing_photo_state(slide)
+
+        if background_image_href:
+            return _render_full_background(slide, background_image_href)
+        if source_image_href:
+            return _render_product_composite(slide, source_image_href)
         return _render_missing_photo_state(slide)
 
-    if background_image_href:
-        return _render_full_background(slide, background_image_href)
-    if source_image_href:
-        return _render_product_composite(slide, source_image_href)
-    return _render_missing_photo_state(slide)
+    png_data = render_slide_image(
+        slide,
+        source_image_href=source_image_href,
+        background_image_href=background_image_href,
+        category_template=category_template,
+    )
+    return _render_png_preview_svg(slide, png_data)
 
 
 def render_pdf_preview(result: GenerationResult) -> bytes:
