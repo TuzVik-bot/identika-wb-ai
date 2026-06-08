@@ -20,6 +20,7 @@ class CategoryTemplate(BaseModel):
     id: str
     name: str
     category: str
+    keywords: list[str] = Field(default_factory=list)
     accent_color: str = "#2563eb"
     frame_style: FrameStyle = "thin"
     title_position: TitlePosition = "top"
@@ -35,9 +36,50 @@ DEFAULT_TEMPLATES = [
         id="cable-default",
         name="Кабель: техно-рамка",
         category="кабель",
+        keywords=["кабель", "type c", "type-c", "usb", "зарядный", "провод", "хаб", "hub", "адаптер"],
         accent_color="#0f766e",
         frame_style="accent",
         title_position="left",
+        photo_treatment="expand_square",
+    ),
+    CategoryTemplate(
+        id="electronics-default",
+        name="Электроника: чистый техно",
+        category="электроника",
+        keywords=["планшет", "ipad", "смартфон", "телефон", "ноутбук", "гаджет", "bluetooth", "wi-fi"],
+        accent_color="#1d4ed8",
+        frame_style="thin",
+        title_position="top",
+        photo_treatment="fit",
+    ),
+    CategoryTemplate(
+        id="lighting-default",
+        name="Свет и интерьер: нижний акцент",
+        category="свет",
+        keywords=["ночник", "лампа", "светильник", "проектор", "звезд", "звёзд", "интерьер"],
+        accent_color="#b45309",
+        frame_style="accent",
+        title_position="bottom",
+        photo_treatment="expand_square",
+    ),
+    CategoryTemplate(
+        id="accessory-default",
+        name="Аксессуары: компактная рамка",
+        category="аксессуар",
+        keywords=["чехол", "держатель", "подставка", "мышка", "мышь", "адаптер", "док станция"],
+        accent_color="#7c3aed",
+        frame_style="thin",
+        title_position="left",
+        photo_treatment="fit",
+    ),
+    CategoryTemplate(
+        id="home-default",
+        name="Дом: спокойная витрина",
+        category="дом",
+        keywords=["дом", "кладбищ", "могил", "лампада", "декор", "интерьер"],
+        accent_color="#047857",
+        frame_style="thin",
+        title_position="top",
         photo_treatment="expand_square",
     ),
 ]
@@ -54,16 +96,25 @@ def _safe_color(value: str) -> str:
     return "#2563eb"
 
 
-def list_category_templates(storage: Storage) -> list[CategoryTemplate]:
+def _builtin_ids() -> set[str]:
+    return {_normalize(item.id) for item in DEFAULT_TEMPLATES}
+
+
+def _custom_templates_from_storage(storage: Storage) -> list[CategoryTemplate]:
     raw = storage.get_settings().get(SETTINGS_KEY, "")
     if not raw:
-        return list(DEFAULT_TEMPLATES)
+        return []
     try:
         payload = json.loads(raw)
         templates = [CategoryTemplate.model_validate(item) for item in payload if isinstance(item, dict)]
     except (json.JSONDecodeError, ValueError, TypeError):
-        return list(DEFAULT_TEMPLATES)
-    return templates or list(DEFAULT_TEMPLATES)
+        return []
+    builtin_ids = _builtin_ids()
+    return [item for item in templates if _normalize(item.id) not in builtin_ids]
+
+
+def list_category_templates(storage: Storage) -> list[CategoryTemplate]:
+    return [*DEFAULT_TEMPLATES, *_custom_templates_from_storage(storage)]
 
 
 def list_category_template_views(storage: Storage) -> list[CategoryTemplateView]:
@@ -75,10 +126,9 @@ def list_category_template_views(storage: Storage) -> list[CategoryTemplateView]
 
 
 def save_category_template(storage: Storage, template: CategoryTemplate) -> bool:
-    builtin_ids = {_normalize(item.id) for item in DEFAULT_TEMPLATES}
-    if _normalize(template.id) in builtin_ids:
+    if _normalize(template.id) in _builtin_ids():
         return False
-    templates = [item for item in list_category_templates(storage) if item.id != template.id]
+    templates = [item for item in _custom_templates_from_storage(storage) if item.id != template.id]
     templates.append(template)
     storage.set_settings(
         {SETTINGS_KEY: json.dumps([item.model_dump() for item in templates], ensure_ascii=False)}
@@ -88,10 +138,9 @@ def save_category_template(storage: Storage, template: CategoryTemplate) -> bool
 
 def delete_category_template(storage: Storage, template_id: str) -> bool:
     clean = _normalize(template_id)
-    builtin_ids = {_normalize(item.id) for item in DEFAULT_TEMPLATES}
-    if clean in builtin_ids:
+    if clean in _builtin_ids():
         return False
-    current = list_category_templates(storage)
+    current = _custom_templates_from_storage(storage)
     templates = [item for item in current if _normalize(item.id) != clean]
     if len(templates) == len(current):
         return False
@@ -114,10 +163,16 @@ def template_from_form(data: dict[str, str]) -> CategoryTemplate:
     frame_style = data.get("frame_style", "thin")
     title_position = data.get("title_position", "top")
     photo_treatment = data.get("photo_treatment", "expand_square")
+    keywords = [
+        _normalize(item)
+        for item in re.split(r"[,;\n]", data.get("keywords", ""))
+        if _normalize(item)
+    ]
     return CategoryTemplate(
         id=template_id[:64],
         name=(data.get("name", "").strip() or category.title() or "Новый шаблон")[:80],
         category=category or "default",
+        keywords=keywords,
         accent_color=_safe_color(data.get("accent_color", "")),
         frame_style=frame_style if frame_style in {"none", "thin", "accent"} else "thin",
         title_position=title_position if title_position in {"top", "left", "bottom"} else "top",
@@ -129,12 +184,18 @@ def find_template_for_product(storage: Storage, product: ProductContext) -> Cate
     candidates = [
         _normalize(product.subject_name or ""),
         _normalize(product.title or ""),
+        _normalize(product.description or ""),
+        _normalize(" ".join(str(value) for value in product.characteristics.values() if value)),
     ]
-    for template in reversed(list_category_templates(storage)):
-        category = _normalize(template.category)
-        if not category:
-            continue
+    ordered_templates = [
+        *_custom_templates_from_storage(storage)[::-1],
+        *DEFAULT_TEMPLATES,
+    ]
+    for template in ordered_templates:
+        matchers = [_normalize(template.category), *[_normalize(item) for item in template.keywords]]
+        matchers = [item for item in matchers if item]
         for candidate in candidates:
-            if candidate == category or category in candidate:
-                return template
+            for matcher in matchers:
+                if candidate == matcher or matcher in candidate:
+                    return template
     return None

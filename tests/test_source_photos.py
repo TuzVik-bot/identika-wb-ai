@@ -127,5 +127,5 @@ def test_attach_source_images_to_job_rerenders(tmp_path) -> None:
     assert any(img.asset_id == staging_id for img in updated.result.product.images)
     slide_path, _ = storage.get_asset(updated.result.slides[0].asset_id)
     svg = slide_path.read_text(encoding="utf-8")
-    assert f"/v1/assets/{staging_id}" in svg
+    assert "data:image/png;base64," in svg
     assert "Загрузите фото товара" not in svg

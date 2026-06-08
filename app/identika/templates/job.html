@@ -110,12 +110,12 @@
   <section class="job-summary" aria-label="Сводка проекта">
     <article class="metric-card metric-card--accent">
       <strong>{{ job.result.slides|length }}</strong>
-      <span>Слайдов</span>
+      <span>{{ job.result.slides|length }} слайдов</span>
       <small>PNG 900×1200 export</small>
     </article>
     <article class="metric-card">
       <strong>{{ job.result.rich.blocks|length }}</strong>
-      <span>Rich-блоков</span>
+      <span>{{ job.result.rich.blocks|length }} rich-блоков</span>
       <small>PNG 1440×900 + PDF preview</small>
     </article>
     <article class="metric-card metric-card--dark">
@@ -253,7 +253,7 @@
           <div class="export-columns">
             <div class="export-main-actions">
               <h3>Скачать и загрузить пакет</h3>
-              <p class="text-muted">Готовый комплект экспорта содержит `manifest.json`, SVG-слайды и Rich-блоки, упакованные в стандартный ZIP-архив.</p>
+              <p class="text-muted">Готовый комплект экспорта содержит <code>manifest.json</code>, PNG-слайды и PNG Rich-блоки, упакованные в стандартный ZIP-архив.</p>
               <p class="text-muted">Режим качества: <strong>{{ job.result.quality_mode }}</strong>{% if job.result.quality_mode == 'preview' %} (после approve автоматически запускается finalize-профиль){% endif %}</p>
               
               <div class="export-buttons-stack">
@@ -262,7 +262,7 @@
                   href="{% if can_export %}{{ base_path }}/v1/generation/jobs/{{ job.id }}/export{% else %}#{% endif %}"
                   {% if not can_export %}aria-disabled="true" tabindex="-1"{% endif %}
                 >
-                  <span>📥 Скачать ZIP-архив</span>
+                  <span>Скачать ZIP-архив</span>
                 </a>
 
                 <a
@@ -270,18 +270,18 @@
                   href="{% if can_rich_export %}{{ base_path }}/v1/generation/jobs/{{ job.id }}/rich-export{% else %}#{% endif %}"
                   {% if not can_rich_export %}aria-disabled="true" tabindex="-1"{% endif %}
                 >
-                  <span>📦 Скачать Rich ZIP</span>
+                  <span>Скачать Rich ZIP</span>
                 </a>
 
                 <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/re-render">
                   <button type="submit" class="button button--ghost button--lg" title="Пересобрать SVG с актуальными фото">
-                    ↻ Пересобрать слайды
+                    Пересобрать слайды
                   </button>
                 </form>
                 
                 <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/upload-to-wb">
                   <button type="submit" class="button button--dark button--lg" {% if not can_upload %}disabled title="Сначала утвердите проект"{% endif %}>
-                    <span>🚀 Загрузить на Wildberries</span>
+                    <span>Загрузить на Wildberries</span>
                   </button>
                   {% if not can_upload %}
                   <p class="small text-muted" style="margin-top: 8px; text-align: center;">* Кнопка станет доступна после утверждения проекта (кнопка Approve сверху)</p>
@@ -296,12 +296,22 @@
                 {% if job.result.warnings %}
                 <ul class="warnings-list">
                   {% for warning in job.result.warnings %}
-                  <li>⚠️ {{ warning }}</li>
+                  <li>{{ warning }}</li>
                   {% endfor %}
                 </ul>
                 {% else %}
-                <p class="text-success">✓ Критичных предупреждений не обнаружено. Пакет готов к загрузке.</p>
+                <p class="text-success">Критичных предупреждений не обнаружено. Пакет готов к загрузке.</p>
                 {% endif %}
+              </div>
+
+              <div class="side-card-mini export-contract-card">
+                <h4>Проверка форматов</h4>
+                <ul class="export-contract-list">
+                  <li><strong>WB slides</strong><span>PNG 900×1200</span></li>
+                  <li><strong>Rich blocks</strong><span>PNG 1440×900</span></li>
+                  <li><strong>Rich HTML</strong><span>только preview, не в ZIP</span></li>
+                  <li><strong>Фото товара</strong><span>JPEG/PNG source</span></li>
+                </ul>
               </div>
 
               {% if job.result.info %}
@@ -318,11 +328,11 @@
               <div class="side-card-mini">
                 <h4>Содержимое пакета</h4>
                 <ul class="package-files-list">
-                  <li>📄 <code>manifest.json</code></li>
-                  <li>🖼️ 10 слайдов PNG 900×1200</li>
-                  <li>🖼️ {{ job.result.rich.blocks|length }} Rich-блоков PNG 1440×900</li>
-                  <li>📕 <code>preview.pdf</code></li>
-                  <li>📦 <code>rich_export.zip</code></li>
+                  <li><code>manifest.json</code></li>
+                  <li><code>slides/slide_01.png</code> ... <code>slide_10.png</code></li>
+                  <li><code>rich/block_01.png</code> ... <code>block_{{ '%02d'|format(job.result.rich.blocks|length) }}.png</code></li>
+                  <li><code>rich/preview.pdf</code></li>
+                  <li><code>rich_export.zip</code></li>
                 </ul>
               </div>
             </div>

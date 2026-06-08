@@ -104,6 +104,11 @@ def test_redesigned_job_page_elements(client: TestClient) -> None:
     # G. Check the side package contents lists are displayed under export tab
     assert "manifest.json" in page_html
     assert "package-files-list" in page_html
+    assert "export-contract-list" in page_html
+    assert "PNG 900×1200" in page_html
+    assert "PNG 1440×900" in page_html
+    assert "только preview, не в ZIP" in page_html
+    assert "slides/slide_01.png" in page_html
 
 
 def test_edit_flow_with_accordion(client: TestClient) -> None:
@@ -135,9 +140,14 @@ def test_templates_page_saves_category_template(client: TestClient) -> None:
     assert page.status_code == 200
     assert "Шаблоны" in page.text
     assert "Кабель: техно-рамка" in page.text
+    assert "Электроника: чистый техно" in page.text
+    assert "Свет и интерьер: нижний акцент" in page.text
     assert 'data-template-field="template_id" name="template_id" value="cable-custom"' in page.text
+    assert 'data-template-field="keywords" name="keywords"' in page.text
+    assert 'data-live-preview' in page.text
     assert "template-copy-btn" in page.text
     assert 'data-template-id="cable-default"' in page.text
+    assert 'data-template-keywords=' in page.text
     assert "Взять за основу" in page.text
 
     saved = client.post(
@@ -146,6 +156,7 @@ def test_templates_page_saves_category_template(client: TestClient) -> None:
             "template_id": "case-default",
             "name": "Чехол: чистая карточка",
             "category": "чехол",
+            "keywords": "чехол, case",
             "accent_color": "#2563eb",
             "frame_style": "thin",
             "title_position": "top",
@@ -158,6 +169,7 @@ def test_templates_page_saves_category_template(client: TestClient) -> None:
     assert updated.status_code == 200
     assert "Чехол: чистая карточка" in updated.text
     assert "чехол" in updated.text
+    assert "case" in updated.text
 
 
 def test_create_page_keeps_selected_category_template(client: TestClient) -> None:
@@ -176,6 +188,7 @@ def test_templates_page_deletes_custom_but_not_builtin_template(client: TestClie
             "template_id": "delete-me",
             "name": "Временный шаблон",
             "category": "временный",
+            "keywords": "временный",
             "accent_color": "#2563eb",
             "frame_style": "thin",
             "title_position": "top",
@@ -210,6 +223,7 @@ def test_templates_page_edits_existing_template(client: TestClient) -> None:
             "template_id": "edit-me",
             "name": "Старое имя",
             "category": "старая",
+            "keywords": "старое",
             "accent_color": "#2563eb",
             "frame_style": "thin",
             "title_position": "top",
@@ -224,6 +238,7 @@ def test_templates_page_edits_existing_template(client: TestClient) -> None:
             "template_id": "edit-me",
             "name": "Новое имя",
             "category": "новая",
+            "keywords": "новое, fresh",
             "accent_color": "#0f766e",
             "frame_style": "accent",
             "title_position": "left",
@@ -234,6 +249,7 @@ def test_templates_page_edits_existing_template(client: TestClient) -> None:
     page = client.get("/templates")
     assert "Новое имя" in page.text
     assert "новая" in page.text
+    assert "fresh" in page.text
     assert "Старое имя" not in page.text
 
 
@@ -244,6 +260,7 @@ def test_templates_page_refuses_builtin_overwrite(client: TestClient) -> None:
             "template_id": "cable-default",
             "name": "Перезаписанный кабель",
             "category": "сломанная",
+            "keywords": "сломанная",
             "accent_color": "#2563eb",
             "frame_style": "none",
             "title_position": "bottom",

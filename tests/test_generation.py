@@ -9,7 +9,7 @@ from PIL import Image
 from identika.config import settings
 from identika.models import CreateJobRequest, ProductContext, ProductImage, ResultTextPatch
 from identika.providers.mock import MockProvider
-from identika.services.category_templates import CategoryTemplate, save_category_template
+from identika.services.category_templates import CategoryTemplate, find_template_for_product, save_category_template
 from identika.services.jobs import JobService
 from identika.storage import Storage
 
@@ -267,6 +267,33 @@ def test_category_template_applies_to_export_and_square_photo_is_preserved(tmp_p
     assert "#0f766e" not in slide_preview
 
 
+def test_builtin_category_templates_match_keywords_and_survive_custom_settings(tmp_path) -> None:
+    storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
+    save_category_template(
+        storage,
+        CategoryTemplate(
+            id="custom-bag",
+            name="Сумки: пользовательский",
+            category="сумка",
+            keywords=["рюкзак", "портфель"],
+            accent_color="#2563eb",
+            frame_style="thin",
+            title_position="top",
+            photo_treatment="fit",
+        ),
+    )
+
+    cable = find_template_for_product(storage, ProductContext(title="USB хаб с LAN адаптером"))
+    lighting = find_template_for_product(storage, ProductContext(title="Ночник-проектор звёздного неба"))
+    electronics = find_template_for_product(storage, ProductContext(title="Планшет iPad Pro 11"))
+    custom = find_template_for_product(storage, ProductContext(title="Городской рюкзак"))
+
+    assert cable and cable.id == "cable-default"
+    assert lighting and lighting.id == "lighting-default"
+    assert electronics and electronics.id == "electronics-default"
+    assert custom and custom.id == "custom-bag"
+
+
 def test_category_template_id_overrides_auto_category_match(tmp_path) -> None:
     storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
     save_category_template(
@@ -360,7 +387,7 @@ def test_clear_slide_image_sets_flag_and_renders_placeholder(tmp_path) -> None:
     slide = updated.result.slides[0]
     assert slide.image_cleared is True
     slide_path, _ = storage.get_asset(slide.asset_id)
-    assert "Загрузите фото товара" in slide_path.read_text(encoding="utf-8")
+    assert "data:image/png;base64," in slide_path.read_text(encoding="utf-8")
 
 
 def test_patch_result_text_updates_manifest_export(tmp_path) -> None:

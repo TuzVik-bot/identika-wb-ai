@@ -75,7 +75,7 @@ def test_job_with_source_images_references_asset_in_svg(tmp_path) -> None:
     assert job.result is not None
     slide_path, _ = storage.get_asset(job.result.slides[0].asset_id)
     svg = slide_path.read_text(encoding="utf-8")
-    assert f"/v1/assets/{asset_id}" in svg
+    assert "data:image/png;base64," in svg
     assert "ТОВАР" not in svg
     export_path, _ = storage.get_asset(job.result.export_asset_id)
     with zipfile.ZipFile(export_path) as zf:

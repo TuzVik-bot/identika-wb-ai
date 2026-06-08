@@ -29,45 +29,60 @@
     <section class="surface-card settings-form">
       <h2>Новый или существующий шаблон</h2>
       <form method="post" action="{{ base_path }}/templates">
-        <label class="field">
-          ID шаблона
-          <input data-template-field="template_id" name="template_id" value="cable-custom" required>
-        </label>
-        <label class="field">
-          Название
-          <input data-template-field="name" name="name" value="Кабель: техно-рамка" required>
-        </label>
-        <label class="field">
-          Категория или слово в названии
-          <input data-template-field="category" name="category" value="кабель" required>
-        </label>
-        <label class="field">
-          Акцентный цвет
-          <input data-template-field="accent_color" type="color" name="accent_color" value="#0f766e">
-        </label>
-        <label class="field">
-          Рамка
-          <select data-template-field="frame_style" name="frame_style">
-            <option value="accent">Акцентная</option>
-            <option value="thin">Тонкая</option>
-            <option value="none">Без рамки</option>
-          </select>
-        </label>
-        <label class="field">
-          Заголовок
-          <select data-template-field="title_position" name="title_position">
-            <option value="left">Слева</option>
-            <option value="top">Сверху</option>
-            <option value="bottom">Снизу</option>
-          </select>
-        </label>
-        <label class="field">
-          Квадратное фото
-          <select data-template-field="photo_treatment" name="photo_treatment">
-            <option value="expand_square">Дорастянуть фон под 900×1200</option>
-            <option value="fit">Просто вписать</option>
-          </select>
-        </label>
+        <div class="template-builder">
+          <div class="template-builder__fields">
+            <label class="field">
+              ID шаблона
+              <input data-template-field="template_id" name="template_id" value="cable-custom" required>
+            </label>
+            <label class="field">
+              Название
+              <input data-template-field="name" name="name" value="Кабель: техно-рамка" required>
+            </label>
+            <label class="field">
+              Категория
+              <input data-template-field="category" name="category" value="кабель" required>
+            </label>
+            <label class="field">
+              Ключевые слова
+              <textarea data-template-field="keywords" name="keywords" rows="3">кабель, usb, type-c, хаб, адаптер</textarea>
+            </label>
+            <label class="field">
+              Акцентный цвет
+              <input data-template-field="accent_color" type="color" name="accent_color" value="#0f766e">
+            </label>
+            <label class="field">
+              Рамка
+              <select data-template-field="frame_style" name="frame_style">
+                <option value="accent">Акцентная</option>
+                <option value="thin">Тонкая</option>
+                <option value="none">Без рамки</option>
+              </select>
+            </label>
+            <label class="field">
+              Заголовок
+              <select data-template-field="title_position" name="title_position">
+                <option value="left">Слева</option>
+                <option value="top">Сверху</option>
+                <option value="bottom">Снизу</option>
+              </select>
+            </label>
+            <label class="field">
+              Квадратное фото
+              <select data-template-field="photo_treatment" name="photo_treatment">
+                <option value="expand_square">Дорастянуть фон под 900×1200</option>
+                <option value="fit">Просто вписать</option>
+              </select>
+            </label>
+          </div>
+          <aside class="template-live" aria-label="Предпросмотр шаблона">
+            <div class="template-preview template-preview--large" data-live-preview style="--template-accent: #0f766e">
+              <span class="template-preview__title" data-live-title>Кабель: техно-рамка</span>
+              <span class="template-preview__subtitle" data-live-category>кабель</span>
+              <span class="template-preview__photo" data-live-photo>Фото товара</span>
+            </div>
+          </aside>
+        </div>
         <div class="settings-actions">
           <button type="submit" class="button button--accent">Сохранить шаблон</button>
         </div>
@@ -94,6 +109,7 @@
           data-template-id="{{ template.id }}"
           data-template-name="{{ template.name }}"
           data-template-category="{{ template.category }}"
+          data-template-keywords="{{ template.keywords|join(', ') }}"
           data-template-accent-color="{{ template.accent_color }}"
           data-template-frame-style="{{ template.frame_style }}"
           data-template-title-position="{{ template.title_position }}"
@@ -108,6 +124,9 @@
             </label>
             <label class="field">Категория
               <input name="category" value="{{ template.category }}" required>
+            </label>
+            <label class="field">Ключевые слова
+              <textarea name="keywords" rows="3">{{ template.keywords|join(', ') }}</textarea>
             </label>
             <label class="field">Цвет
               <input type="color" name="accent_color" value="{{ template.accent_color }}">
@@ -158,25 +177,55 @@ document.addEventListener('DOMContentLoaded', () => {
     ])
   );
   const title = document.getElementById('templates-title');
+  const live = document.querySelector('[data-live-preview]');
+  const liveTitle = document.querySelector('[data-live-title]');
+  const liveCategory = document.querySelector('[data-live-category]');
+  const livePhoto = document.querySelector('[data-live-photo]');
 
   function customId(id) {
     if (!id) return 'custom-template';
     return id.endsWith('-custom') ? id : `${id.replace(/-default$/, '')}-custom`;
   }
 
+  function updatePreview() {
+    if (!live) return;
+    const accent = fields.accent_color?.value || '#2563eb';
+    const titleValue = fields.name?.value || 'Новый шаблон';
+    const categoryValue = fields.category?.value || 'категория';
+    const frame = fields.frame_style?.value || 'thin';
+    const position = fields.title_position?.value || 'top';
+    const photo = fields.photo_treatment?.value || 'expand_square';
+    live.style.setProperty('--template-accent', accent);
+    live.dataset.frame = frame;
+    live.dataset.titlePosition = position;
+    live.dataset.photoTreatment = photo;
+    if (liveTitle) liveTitle.textContent = titleValue;
+    if (liveCategory) liveCategory.textContent = categoryValue;
+    if (livePhoto) livePhoto.textContent = photo === 'expand_square' ? 'Фон 900×1200' : 'Фото вписано';
+  }
+
+  Object.values(fields).forEach((field) => {
+    field.addEventListener('input', updatePreview);
+    field.addEventListener('change', updatePreview);
+  });
+
   document.querySelectorAll('.template-copy-btn').forEach((button) => {
     button.addEventListener('click', () => {
       fields.template_id.value = customId(button.dataset.templateId || '');
       fields.name.value = `${button.dataset.templateName || 'Шаблон'} · копия`;
       fields.category.value = button.dataset.templateCategory || '';
+      fields.keywords.value = button.dataset.templateKeywords || '';
       fields.accent_color.value = button.dataset.templateAccentColor || '#2563eb';
       fields.frame_style.value = button.dataset.templateFrameStyle || 'thin';
       fields.title_position.value = button.dataset.templateTitlePosition || 'top';
       fields.photo_treatment.value = button.dataset.templatePhotoTreatment || 'expand_square';
+      updatePreview();
       title?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       fields.name.focus();
     });
   });
+
+  updatePreview();
 });
 </script>
 {% endblock %}
