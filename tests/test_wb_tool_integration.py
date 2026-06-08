@@ -186,6 +186,8 @@ def test_upload_to_wb_staging_redirect(client: TestClient, monkeypatch) -> None:
     page = client.get(upload.headers["location"])
     assert page.status_code == 200
     assert "ZIP" in page.text
+    assert "Автозагрузка на маркетплейс ещё не включена" in page.text
+    assert "WB media upload is not implemented yet" in page.text
 
 
 def test_upload_to_wb_error_includes_detail(client: TestClient, monkeypatch) -> None:

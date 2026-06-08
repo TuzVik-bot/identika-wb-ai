@@ -59,9 +59,10 @@ def test_upload_to_wb_failure_redirects_with_detail(client: TestClient, monkeypa
     assert upload.status_code == 303
     assert "upload=error" in upload.headers["location"]
     assert "upload_detail=" in upload.headers["location"]
+    assert "upload_status_code=504" in upload.headers["location"]
 
 
-def test_upload_to_wb_failure_redirects_with_detail(client: TestClient, monkeypatch) -> None:
+def test_upload_to_wb_failure_page_shows_detail(client: TestClient, monkeypatch) -> None:
     async def fake_upload_job(self, job: JobRecord, public_base_url: str = "") -> dict:
         return {"ok": False, "detail": "upstream timeout", "status": 504}
 
@@ -71,5 +72,7 @@ def test_upload_to_wb_failure_redirects_with_detail(client: TestClient, monkeypa
     client.post(f"/v1/generation/jobs/{job_id}/approve")
     upload = client.post(f"/jobs/{job_id}/upload-to-wb")
     assert upload.status_code == 303
-    assert "upload=error" in upload.headers["location"]
-    assert "upload_detail=" in upload.headers["location"]
+    page = client.get(upload.headers["location"])
+    assert page.status_code == 200
+    assert "не удалось загрузить пакет" in page.text.lower()
+    assert "upstream timeout" in page.text
