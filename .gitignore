@@ -1,5 +1,7 @@
 data/
 assets/
+identika.sqlite
+*.sqlite
 .env
 .venv/
 __pycache__/

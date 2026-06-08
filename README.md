@@ -90,11 +90,23 @@ RUN_OPENROUTER_E2E=1 RUN_OPENROUTER_IMAGE_E2E=1 pytest -q tests/test_openrouter_
 ## API
 
 - `GET /health`
+- `GET /`, `GET /create`, `GET /jobs/{job_id}` — HTML-кабинет.
+- `GET /settings`, `POST /settings`, `POST /settings/test` — провайдер и OpenRouter.
+- `GET /templates`, `POST /templates`, `POST /templates/{template_id}/delete` — шаблоны категорий.
+- `POST /v1/uploads/source-images` — загрузка исходных фото.
 - `POST /v1/generation/jobs`
+- `GET /v1/generation/jobs`
 - `GET /v1/generation/jobs/{job_id}`
 - `GET /v1/generation/jobs/{job_id}/result`
+- `PATCH /v1/generation/jobs/{job_id}/result/text`
+- `POST /v1/generation/jobs/{job_id}/re-render`
+- `POST /v1/generation/jobs/{job_id}/source-images`
 - `POST /v1/generation/jobs/{job_id}/approve`
+- `DELETE /v1/generation/jobs/{job_id}`
+- `DELETE /v1/generation/jobs/{job_id}/slides/{slide_index}/text`
+- `DELETE /v1/generation/jobs/{job_id}/slides/{slide_index}/image`
 - `GET /v1/generation/jobs/{job_id}/export`
+- `GET /v1/generation/jobs/{job_id}/rich-export`
 - `GET /v1/assets/{asset_id}`
 
 ## Безопасность
