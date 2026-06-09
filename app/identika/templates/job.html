@@ -48,12 +48,22 @@
   <section class="surface-card notice notice--success">Пакет успешно отправлен в WB Tool.</section>
   {% elif upload_status == 'staging' %}
   <section class="surface-card notice notice--warning">
-    <p>ZIP и manifest подготовлены для WB Tool. Автозагрузка на маркетплейс ещё не включена на стороне WB Tool — скачайте Export ZIP или дождитесь реализации <code>POST /api/ai/jobs/{id}/upload</code>.</p>
+    <p><strong>Пакет готов к передаче в WB Tool.</strong> Автозагрузка на маркетплейс ещё не включена на стороне WB Tool, поэтому сейчас используйте готовые архивы вручную.</p>
+    <div class="notice-actions">
+      {% if can_export %}
+      <a class="button button--accent" href="{{ base_path }}/v1/generation/jobs/{{ job.id }}/export">Скачать Export ZIP</a>
+      {% endif %}
+      {% if can_rich_export %}
+      <a class="button button--ghost" href="{{ base_path }}/v1/generation/jobs/{{ job.id }}/rich-export">Скачать Rich ZIP</a>
+      {% endif %}
+    </div>
+    <p class="text-muted">Ожидаемый endpoint для полной автозагрузки: <code>POST /api/ai/jobs/{id}/upload</code>.</p>
     {% if upload_detail %}<p class="text-muted">{{ upload_detail }}</p>{% endif %}
   </section>
   {% elif upload_status == 'error' %}
   <section class="surface-card notice notice--error">
     <p>Не удалось загрузить пакет в WB Tool. Проверьте, что сервис доступен и job утверждён (approve).</p>
+    {% if upload_status_code %}<p class="text-muted">HTTP статус WB Tool: <code>{{ upload_status_code }}</code></p>{% endif %}
     {% if upload_detail %}<p class="text-muted">{{ upload_detail }}</p>{% endif %}
   </section>
   {% elif request.query_params.get('rerender') == 'ok' %}
@@ -295,10 +305,12 @@
                 
                 <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/upload-to-wb">
                   <button type="submit" class="button button--dark button--lg" {% if not can_upload %}disabled title="Сначала утвердите проект"{% endif %}>
-                    <span>Загрузить на Wildberries</span>
+                    <span>Передать в WB Tool</span>
                   </button>
                   {% if not can_upload %}
                   <p class="small text-muted" style="margin-top: 8px; text-align: center;">* Кнопка станет доступна после утверждения проекта (кнопка Approve сверху)</p>
+                  {% else %}
+                  <p class="small text-muted" style="margin-top: 8px; text-align: center;">Если WB Tool ещё не поддерживает автозагрузку, сервис подготовит ZIP для ручной передачи.</p>
                   {% endif %}
                 </form>
               </div>

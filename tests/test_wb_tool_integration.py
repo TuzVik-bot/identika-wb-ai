@@ -186,7 +186,9 @@ def test_upload_to_wb_staging_redirect(client: TestClient, monkeypatch) -> None:
     page = client.get(upload.headers["location"])
     assert page.status_code == 200
     assert "ZIP" in page.text
-    assert "Автозагрузка на маркетплейс ещё не включена" in page.text
+    assert "Пакет готов к передаче в WB Tool" in page.text
+    assert "Скачать Export ZIP" in page.text
+    assert "Скачать Rich ZIP" in page.text
     assert "WB media upload is not implemented yet" in page.text
 
 
@@ -201,3 +203,4 @@ def test_upload_to_wb_error_includes_detail(client: TestClient, monkeypatch) -> 
     upload = client.post(f"/jobs/{job_id}/upload-to-wb")
     assert "upload=error" in upload.headers["location"]
     assert "upload_detail=" in upload.headers["location"]
+    assert "upload_status_code=503" in upload.headers["location"]

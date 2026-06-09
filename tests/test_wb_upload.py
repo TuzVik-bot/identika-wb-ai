@@ -75,4 +75,6 @@ def test_upload_to_wb_failure_page_shows_detail(client: TestClient, monkeypatch)
     page = client.get(upload.headers["location"])
     assert page.status_code == 200
     assert "не удалось загрузить пакет" in page.text.lower()
+    assert "HTTP статус WB Tool" in page.text
+    assert "504" in page.text
     assert "upstream timeout" in page.text

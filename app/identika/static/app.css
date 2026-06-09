@@ -1160,6 +1160,13 @@ code {
   border: 1px solid #fcd34d;
 }
 
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0 8px;
+}
+
 .source-preview {
   display: flex;
   flex-wrap: wrap;

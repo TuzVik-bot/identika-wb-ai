@@ -299,6 +299,7 @@ async def job_page(request: Request, job_id: str) -> HTMLResponse:
     can_upload = bool(job.result and job.status == "approved" and can_export)
     upload_status = request.query_params.get("upload", "")
     upload_detail = request.query_params.get("upload_detail", "")
+    upload_status_code = request.query_params.get("upload_status_code", "")
     missing_source_photos = bool(job.result and not has_source_assets(job.result.product))
     return apply_no_cache(
         request.app.state.templates.TemplateResponse(
@@ -316,6 +317,7 @@ async def job_page(request: Request, job_id: str) -> HTMLResponse:
                 "can_upload": can_upload,
                 "upload_status": upload_status,
                 "upload_detail": upload_detail,
+                "upload_status_code": upload_status_code,
                 "missing_source_photos": missing_source_photos,
                 "category_templates": list_category_template_views(service(request).storage),
             },
