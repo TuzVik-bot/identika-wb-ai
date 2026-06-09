@@ -13,10 +13,10 @@
 # - In the server block for /identika/, add:
 #     proxy_no_cache 1;
 #     proxy_cache_bypass 1;
-# - Use a single site-wide Basic Auth (WB Tool). Do NOT set a separate
-#   auth_basic "Identika" on /identika/ — remove identika.htpasswd if present.
+# - /identika/ is public and must override the site-wide WB Tool Basic Auth:
+#     auth_basic off;
 # - Keep /identika/static/ with auth_basic off so CSS loads without challenge.
-# - Do not set IDENTIKA_UI_PASSWORD in the app .env (inherit nginx auth only).
+# - Do not set IDENTIKA_UI_PASSWORD in the app .env.
 
 set -euo pipefail
 
@@ -107,9 +107,25 @@ run_ssh "cd $REMOTE_APP && .venv/bin/pip install -q ."
 run_sudo "systemctl restart identika"
 run_ssh "sleep 3"
 
-echo "→ nginx: unified auth + no-cache for /identika/ dynamic routes"
+echo "→ nginx: public /identika/ + no-cache for dynamic routes"
 run_sudo "sed -i '/auth_basic \"Identika\";/d' /etc/nginx/sites-available/wb-tool 2>/dev/null || true"
 run_sudo "sed -i '/auth_basic_user_file \\/etc\\/nginx\\/identika.htpasswd;/d' /etc/nginx/sites-available/wb-tool 2>/dev/null || true"
+run_sudo "python3 - <<'PY'
+from pathlib import Path
+path = Path('/etc/nginx/sites-available/wb-tool')
+text = path.read_text()
+if 'location = /identika {' not in text:
+    marker = '    location /identika/static/ {'
+    block = '    location = /identika {\\n        auth_basic off;\\n        return 301 https://\$host/identika/;\\n    }\\n\\n'
+    if marker in text:
+        text = text.replace(marker, block + marker, 1)
+text = text.replace('return 301 /identika/;', 'return 301 https://\$host/identika/;')
+old = '    location /identika/ {\\n'
+new = '    location /identika/ {\\n        auth_basic off;\\n'
+if new not in text and old in text:
+    text = text.replace(old, new, 1)
+path.write_text(text)
+PY"
 if ! is_dry_run; then
   if ! run_ssh "grep -q 'proxy_no_cache 1;' /etc/nginx/sites-available/wb-tool 2>/dev/null"; then
     run_sudo "sed -i '/location \\/identika\\/ {/a\\        proxy_no_cache 1;\\n        proxy_cache_bypass 1;' /etc/nginx/sites-available/wb-tool"

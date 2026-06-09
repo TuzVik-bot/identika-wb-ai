@@ -34,7 +34,7 @@ docker compose up --build
 
 ### VPS (текущий прод)
 
-- URL: `https://eurasia-transline.online/identika/` (nginx → `127.0.0.1:8787`, единый Basic Auth WB Tool на весь сайт).
+- URL: `https://eurasia-transline.online/identika/` (nginx → `127.0.0.1:8787`, без Basic Auth на разделе Identika).
 - Код на сервере: `/home/tbot/identika`, systemd: `identika.service`.
 - БД и ассеты: `/home/tbot/.identika/`, `/home/tbot/.identika/assets/` (см. `.env` на сервере).
 - Обязательно: `IDENTIKA_PUBLIC_BASE_PATH=/identika` в `/home/tbot/identika/.env`.
@@ -54,7 +54,7 @@ DRY_RUN=1 ./scripts/deploy_vps.sh
 
 Ручной рестарт на сервере: `sudo systemctl restart identika`.
 
-Nginx для `/identika/`: не кэшировать динамику (`proxy_no_cache 1; proxy_cache_bypass 1;`), не использовать отдельный `auth_basic "Identika"` — только общий вход сайта. Статика `/identika/static/` без пароля. В `.env` не задавать `IDENTIKA_UI_PASSWORD`.
+Nginx для `/identika/`: не кэшировать динамику (`proxy_no_cache 1; proxy_cache_bypass 1;`) и явно отключать Basic Auth (`auth_basic off;`) для `/identika/`, `/identika/static/` и redirect `/identika`. В `.env` не задавать `IDENTIKA_UI_PASSWORD`.
 
 ### Render (альтернатива)
 
