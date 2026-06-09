@@ -174,6 +174,44 @@ def test_ui_smoke_pages_demo_redirect_edit_approve_export_and_assets(client: Tes
     assert locked_edit.status_code == 409
 
 
+def test_dashboard_project_search_and_status_filters(client: TestClient) -> None:
+    first = client.post("/demo")
+    first_job_id = _job_id_from_location(first.headers["location"])
+    client.post(f"/v1/generation/jobs/{first_job_id}/approve")
+
+    second = client.post(
+        "/v1/generation/jobs",
+        json={
+            "product": {
+                "store_slug": "api",
+                "sku_id": 8080,
+                "nm_id": 9090,
+                "title": "Кабель Type-C для фильтра",
+                "subject_name": "Кабели",
+            }
+        },
+    )
+    assert second.status_code == 200
+
+    dashboard = client.get("/")
+    assert dashboard.status_code == 200
+    assert "project-filter" in dashboard.text
+    assert "project-status-tabs" in dashboard.text
+    assert "Все проекты" in dashboard.text
+    assert "Кабель Type-C для фильтра" in dashboard.text
+
+    approved = client.get("/?status=approved")
+    assert approved.status_code == 200
+    assert "Утверждён" in approved.text
+    assert "Кабель Type-C для фильтра" not in approved.text
+
+    searched = client.get("/?q=type-c")
+    assert searched.status_code == 200
+    assert "Найдено" in searched.text
+    assert "Кабель Type-C для фильтра" in searched.text
+    assert "Ночник-проектор звёздного неба" not in searched.text
+
+
 def test_negative_404_and_409_responses(client: TestClient) -> None:
     assert client.get("/jobs/missing").status_code == 404
     assert client.get("/v1/generation/jobs/missing").status_code == 404

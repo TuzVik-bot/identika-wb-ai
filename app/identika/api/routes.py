@@ -26,6 +26,7 @@ from identika.services.product_images import (
 )
 from identika.services.uploads import save_source_images
 from identika.services.wb_tool import WBToolClient, upload_redirect_query
+from identika.ui_labels import job_status_label
 
 router = APIRouter()
 
@@ -33,6 +34,8 @@ NO_CACHE_HEADERS = {
     "Cache-Control": "no-store, no-cache, must-revalidate",
     "Pragma": "no-cache",
 }
+
+PROJECT_STATUS_FILTERS = ("succeeded", "approved", "running", "failed")
 
 
 def apply_no_cache(response: HTMLResponse | JSONResponse | FileResponse) -> HTMLResponse | JSONResponse | FileResponse:
@@ -81,6 +84,60 @@ def dashboard_stats(jobs: list) -> dict[str, int]:
         "failed_count": sum(1 for job in jobs if job.status == "failed"),
         "asset_count": sum(1 for job in generated if job.result and job.result.export_asset_id),
     }
+
+
+def filter_dashboard_jobs(jobs: list, query: str = "", status: str = "") -> list:
+    query = query.strip().lower()
+    status = status.strip().lower()
+    filtered = jobs
+    if status:
+        if status == "running":
+            filtered = [job for job in filtered if job.status in {"queued", "running"}]
+        else:
+            filtered = [job for job in filtered if job.status == status]
+    if query:
+        def matches(job) -> bool:
+            fields = [
+                job.product_title,
+                job.store_slug,
+                str(job.nm_id or ""),
+                str(job.sku_id or ""),
+                job.id,
+            ]
+            return any(query in field.lower() for field in fields if field)
+
+        filtered = [job for job in filtered if matches(job)]
+    return filtered
+
+
+def dashboard_status_tabs(jobs: list, selected_status: str, query: str) -> list[dict[str, str | int | bool]]:
+    counts = {
+        "": len(jobs),
+        "succeeded": sum(1 for job in jobs if job.status == "succeeded"),
+        "approved": sum(1 for job in jobs if job.status == "approved"),
+        "running": sum(1 for job in jobs if job.status in {"queued", "running"}),
+        "failed": sum(1 for job in jobs if job.status == "failed"),
+    }
+    tabs = [{"value": "", "label": "Все", "count": counts[""]}]
+    tabs.extend(
+        {
+            "value": status,
+            "label": "В работе" if status == "running" else job_status_label(status),
+            "count": counts[status],
+        }
+        for status in PROJECT_STATUS_FILTERS
+    )
+    clean_query = quote(query.strip())
+    for tab in tabs:
+        value = str(tab["value"])
+        params = []
+        if value:
+            params.append(f"status={quote(value)}")
+        if clean_query:
+            params.append(f"q={clean_query}")
+        tab["href"] = url("/" + (f"?{'&'.join(params)}" if params else ""))
+        tab["active"] = value == selected_status
+    return tabs
 
 
 async def create_context(request: Request) -> dict:
@@ -132,12 +189,20 @@ async def health(request: Request) -> JSONResponse:
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     jobs = service(request).list_jobs()
+    project_query = request.query_params.get("q", "").strip()
+    project_status = request.query_params.get("status", "").strip().lower()
+    if project_status not in {"", *PROJECT_STATUS_FILTERS}:
+        project_status = ""
+    filtered_jobs = filter_dashboard_jobs(jobs, project_query, project_status)
     return request.app.state.templates.TemplateResponse(
         request,
         "index.html",
         {
             "jobs": jobs,
-            "recent_jobs": jobs[:5],
+            "project_jobs": filtered_jobs,
+            "project_query": project_query,
+            "project_status": project_status,
+            "project_status_tabs": dashboard_status_tabs(jobs, project_status, project_query),
             "stats": dashboard_stats(jobs),
             "account": {"name": "Локальный кабинет", "support_code": "314046"},
             "wb_tool_base_url": settings.wb_tool_base_url,

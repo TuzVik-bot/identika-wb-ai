@@ -431,6 +431,79 @@ button:disabled,
   margin-bottom: 18px;
 }
 
+.project-filter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.project-search {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.project-search input {
+  min-width: 0;
+  width: 100%;
+  padding: 13px 14px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-weight: 700;
+  text-transform: none;
+}
+
+.project-status-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.project-status-tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 11px 12px;
+  color: var(--text-soft);
+  text-decoration: none;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.project-status-tab span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.project-status-tab strong {
+  flex: 0 0 auto;
+  color: var(--text);
+}
+
+.project-status-tab.is-active {
+  color: var(--surface);
+  background: var(--dark);
+  border-color: var(--dark);
+}
+
+.project-status-tab.is-active strong {
+  color: var(--surface);
+}
+
 .project-create,
 .project-folder,
 .project-item,
@@ -505,6 +578,14 @@ button:disabled,
 .slide-grid {
   display: grid;
   gap: 12px;
+}
+
+.project-list-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 10px;
 }
 
 .project-item {
@@ -1515,6 +1596,20 @@ code {
   .metric-grid,
   .quick-grid {
     grid-template-columns: 1fr;
+  }
+
+  .project-filter {
+    grid-template-columns: 1fr;
+  }
+
+  .project-status-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .project-list-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
   }
 
   .account-card,

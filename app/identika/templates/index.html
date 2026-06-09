@@ -26,6 +26,29 @@
         <a class="button button--ghost" href="{{ base_path }}/create">Новый проект</a>
       </div>
 
+      <form class="project-filter" method="get" action="{{ base_path }}/#projects" aria-label="Фильтр проектов">
+        <label class="project-search">
+          <span>Поиск проекта</span>
+          <input name="q" value="{{ project_query }}" placeholder="Название, SKU, nmID или ID">
+        </label>
+        {% if project_status %}
+        <input type="hidden" name="status" value="{{ project_status }}">
+        {% endif %}
+        <button type="submit" class="button button--dark">Найти</button>
+        {% if project_query or project_status %}
+        <a class="button button--ghost" href="{{ base_path }}/#projects">Сбросить</a>
+        {% endif %}
+      </form>
+
+      <nav class="project-status-tabs" aria-label="Статусы проектов">
+        {% for tab in project_status_tabs %}
+        <a class="project-status-tab {% if tab.active %}is-active{% endif %}" href="{{ tab.href }}#projects">
+          <span>{{ tab.label }}</span>
+          <strong>{{ tab.count }}</strong>
+        </a>
+        {% endfor %}
+      </nav>
+
       <div class="project-actions">
         <a class="project-create" href="{{ base_path }}/create">
           <span class="project-create__icon" aria-hidden="true">+</span>
@@ -44,9 +67,14 @@
         </a>
       </div>
 
-      {% if recent_jobs %}
-      <div class="project-list" aria-label="Последние проекты">
-        {% for job in recent_jobs %}
+      <div class="project-list-head">
+        <strong>{% if project_query or project_status %}Найдено{% else %}Все проекты{% endif %}: {{ project_jobs|length }}</strong>
+        <span class="text-muted">Всего в кабинете: {{ jobs|length }}</span>
+      </div>
+
+      {% if project_jobs %}
+      <div class="project-list" aria-label="Все проекты">
+        {% for job in project_jobs %}
         <a class="project-item" href="{{ base_path }}/jobs/{{ job.id }}">
           <span class="status status-{{ job.status }}">{{ job.status|status_label }}</span>
           <span class="project-item__body">
@@ -59,8 +87,13 @@
       </div>
       {% else %}
       <div class="empty-state">
+        {% if project_query or project_status %}
+        <strong>Проекты не найдены.</strong>
+        <p>Измени поиск или сбрось фильтры.</p>
+        {% else %}
         <strong>Пока нет проектов.</strong>
         <p>Создай первый комплект через демо или WB Tool.</p>
+        {% endif %}
       </div>
       {% endif %}
     </section>
