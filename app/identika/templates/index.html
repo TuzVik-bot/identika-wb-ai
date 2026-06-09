@@ -80,6 +80,18 @@
           <span class="project-item__body">
             <strong>{{ job.product_title }}</strong>
             <small>store: {{ job.store_slug }}{% if job.nm_id %} · nmID {{ job.nm_id }}{% endif %}{% if job.sku_id %} · SKU {{ job.sku_id }}{% endif %}</small>
+            <span class="project-item__meta">
+              <span>Обновлён {{ job.updated_at|short_datetime }}</span>
+              {% if job.result %}
+              <span>{{ job.result.slides|length }} слайдов</span>
+              <span>{{ job.result.rich.blocks|length }} rich</span>
+              {% if job.result.export_asset_id %}<b>ZIP</b>{% endif %}
+              {% if job.result.rich.zip_asset_id %}<b>Rich ZIP</b>{% endif %}
+              <b>{{ job.result.quality_mode }}</b>
+              {% elif job.error %}
+              <span>{{ job.error }}</span>
+              {% endif %}
+            </span>
           </span>
           <span class="project-item__arrow" aria-hidden="true">›</span>
         </a>

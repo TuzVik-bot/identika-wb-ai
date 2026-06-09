@@ -10,7 +10,7 @@ from identika.api.routes import router
 from identika.config import settings
 from identika.middleware import ApiKeyMiddleware, UiBasicAuthMiddleware
 from identika.services.jobs import JobService
-from identika.ui_labels import job_status_label
+from identika.ui_labels import job_status_label, short_datetime
 
 
 def create_app() -> FastAPI:
@@ -30,6 +30,7 @@ def create_app() -> FastAPI:
         static_version = "0"
     app.state.templates.env.globals["static_version"] = static_version
     app.state.templates.env.filters["status_label"] = job_status_label
+    app.state.templates.env.filters["short_datetime"] = short_datetime
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     if settings.public_base_path:
         app.mount(

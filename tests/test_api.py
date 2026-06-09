@@ -197,8 +197,13 @@ def test_dashboard_project_search_and_status_filters(client: TestClient) -> None
     assert dashboard.status_code == 200
     assert "project-filter" in dashboard.text
     assert "project-status-tabs" in dashboard.text
+    assert "project-item__meta" in dashboard.text
     assert "Все проекты" in dashboard.text
     assert "Кабель Type-C для фильтра" in dashboard.text
+    assert "Обновлён" in dashboard.text
+    assert "10 слайдов" in dashboard.text
+    assert "Rich ZIP" in dashboard.text
+    assert "final" in dashboard.text
 
     approved = client.get("/?status=approved")
     assert approved.status_code == 200

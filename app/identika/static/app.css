@@ -605,6 +605,31 @@ button:disabled,
   -webkit-line-clamp: 2;
 }
 
+.project-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.project-item__meta span,
+.project-item__meta b {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: var(--text-soft);
+  background: var(--surface-soft);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.project-item__meta b {
+  color: var(--success);
+  background: #ecfdf3;
+}
+
 .status,
 .role {
   display: inline-flex;
