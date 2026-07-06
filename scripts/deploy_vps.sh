@@ -20,7 +20,7 @@
 
 set -euo pipefail
 
-VPS_HOST="${VPS_HOST:-213.184.248.155}"
+VPS_HOST="${VPS_HOST:-eurasia-transline.online}"
 VPS_PORT="${VPS_PORT:-23023}"
 VPS_USER="${VPS_USER:-tbot}"
 REMOTE_APP="${REMOTE_APP:-/home/tbot/identika}"

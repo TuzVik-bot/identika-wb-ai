@@ -20,6 +20,12 @@ def test_deploy_script_syntax_is_valid() -> None:
     assert result.returncode == 0, result.stderr
 
 
+def test_deploy_script_defaults_to_public_domain() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    assert 'VPS_HOST="${VPS_HOST:-eurasia-transline.online}"' in script
+    assert "213.184.248.155" not in script
+
+
 def test_deploy_script_dry_run_does_not_expose_password() -> None:
     secret = "super-secret-value"
     env = {
