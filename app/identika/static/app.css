@@ -769,6 +769,7 @@ button:disabled,
 .job-generation-meta {
   display: grid;
   gap: 16px;
+  min-width: 0;
   margin-bottom: 16px;
 }
 
@@ -777,11 +778,14 @@ button:disabled,
   flex-wrap: wrap;
   align-items: center;
   gap: 12px 16px;
+  min-width: 0;
 }
 
 .job-generation-meta__main p {
+  min-width: 0;
   margin: 0;
   color: var(--text-soft);
+  overflow-wrap: anywhere;
 }
 
 .source-photo-status {
@@ -789,6 +793,7 @@ button:disabled,
   grid-template-columns: minmax(0, auto) minmax(0, 1fr);
   gap: 10px 14px;
   align-items: center;
+  min-width: 0;
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
@@ -815,8 +820,10 @@ button:disabled,
 }
 
 .source-photo-status p {
+  min-width: 0;
   margin: 0;
   color: var(--text-soft);
+  overflow-wrap: anywhere;
 }
 
 .source-photo-status--ok {
@@ -832,6 +839,7 @@ button:disabled,
 .readiness-panel {
   display: grid;
   gap: 10px;
+  min-width: 0;
   padding: 14px;
   border: 1px solid var(--line);
   border-left: 3px solid var(--success);
@@ -868,6 +876,7 @@ button:disabled,
 
 .readiness-panel p,
 .readiness-panel ul {
+  min-width: 0;
   margin: 0;
 }
 
@@ -880,17 +889,20 @@ button:disabled,
 }
 
 .readiness-panel li {
+  min-width: 0;
   padding: 5px 9px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.74);
   color: var(--text-soft);
   font-size: 12px;
   font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 .job-template-switcher {
   display: grid;
   gap: 8px;
+  min-width: 0;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
@@ -908,6 +920,7 @@ button:disabled,
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
+  min-width: 0;
   align-items: center;
 }
 
@@ -924,15 +937,18 @@ button:disabled,
 
 .job-generation-meta__warnings,
 .job-generation-meta__info {
+  min-width: 0;
   padding-top: 12px;
   border-top: 1px solid var(--line);
 }
 
 .job-generation-meta__warnings h3,
 .job-generation-meta__info h3 {
+  min-width: 0;
   margin: 0 0 8px;
   font-size: 14px;
   font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 .job-generation-meta__warnings {
@@ -1646,6 +1662,14 @@ code {
     grid-template-columns: 1fr;
   }
 
+  .job-template-switcher__controls {
+    grid-template-columns: 1fr;
+  }
+
+  .job-template-switcher__controls .button {
+    width: 100%;
+  }
+
   .job-hero {
     align-items: flex-start;
     flex-direction: column;
@@ -2214,6 +2238,7 @@ code {
   color: var(--danger);
   font-size: 13px;
   margin-bottom: 8px;
+  overflow-wrap: anywhere;
 }
 
 .text-success {
@@ -2581,6 +2606,7 @@ code {
 
 .info-list li {
   margin-bottom: 6px;
+  overflow-wrap: anywhere;
 }
 
 .side-card-mini--info {
