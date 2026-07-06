@@ -20,6 +20,10 @@
         <div id="source-preview" class="source-preview" hidden aria-live="polite"></div>
         <input type="hidden" id="source-image-asset-ids" name="source_image_asset_ids" value="">
         <p id="upload-status" class="text-muted">До 4 фото товара с разных сторон</p>
+        <label class="field internet-photo-field" for="source-image-urls-input">Ссылка на фото из интернета
+          <textarea id="source-image-urls-input" name="source_image_urls" rows="3" placeholder="https://example.com/product.jpg"></textarea>
+          <small class="text-muted">Можно вставить до 4 прямых ссылок на изображения, каждую с новой строки.</small>
+        </label>
         {% if photo_hint %}
         <p class="notice notice--warning photo-hint" role="status">{{ photo_hint }}</p>
         {% endif %}
@@ -115,9 +119,10 @@
           <input type="hidden" name="brief" value="{{ brief }}">
           <input type="hidden" name="category_template_id" class="category-template-id-field" value="{{ category_template_id }}">
           <input type="hidden" name="source_image_asset_ids" class="source-image-ids-field" value="">
+          <input type="hidden" name="source_image_urls" class="source-image-urls-field" value="">
           <input type="hidden" name="allow_generate_without_photos" class="allow-without-photos-field" value="">
-          <button type="submit" class="button wb-generate-btn" disabled title="Сначала загрузите фото товара слева">Сгенерировать</button>
-          <p class="text-muted wb-generate-hint">Загрузите хотя бы 1 фото в блоке «Ваш товар» или отметьте генерацию без фото.</p>
+          <button type="submit" class="button wb-generate-btn" title="Сначала попробуем фото из WB, затем интернет-ссылку или загруженные вручную фото">Сгенерировать</button>
+          <p class="text-muted wb-generate-hint">Сначала попробуем фото из WB. Если WB не отдаст изображения, вставьте ссылку на фото, загрузите файл слева или включите режим без фото.</p>
         </form>
       </article>
       {% endfor %}
@@ -207,8 +212,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const preview = document.getElementById('source-preview');
   const idsField = document.getElementById('source-image-asset-ids');
   const statusEl = document.getElementById('upload-status');
+  const sourceUrlsInput = document.getElementById('source-image-urls-input');
   const dropZone = document.getElementById('drop-zone');
   const generateFields = document.querySelectorAll('.source-image-ids-field');
+  const sourceUrlFields = document.querySelectorAll('.source-image-urls-field');
   const allowCheckbox = document.getElementById('allow-generate-without-photos');
   const allowFields = document.querySelectorAll('.allow-without-photos-field');
   const templateSelect = document.getElementById('category-template-select');
@@ -219,19 +226,24 @@ document.addEventListener('DOMContentLoaded', () => {
   function syncGenerateButtons() {
     const hasUpload = Boolean(idsField.value.trim());
     const allowWithout = Boolean(allowCheckbox?.checked);
-    const enabled = hasUpload || allowWithout;
     generateButtons.forEach((button) => {
-      button.disabled = !enabled;
-      button.title = enabled
-        ? ''
-        : 'Сначала загрузите фото товара слева или отметьте «Сгенерировать без фото»';
+      button.disabled = false;
+      button.title = hasUpload
+        ? 'Будут использованы загруженные вручную фото'
+        : allowWithout
+          ? 'Генерация запустится без исходных фото товара'
+          : 'Сначала попробуем фото из WB; если их нет, используйте ссылку или загрузите файл';
     });
     allowFields.forEach((field) => {
       field.value = allowWithout ? '1' : '';
     });
+    sourceUrlFields.forEach((field) => {
+      field.value = sourceUrlsInput?.value || '';
+    });
   }
 
   allowCheckbox?.addEventListener('change', syncGenerateButtons);
+  sourceUrlsInput?.addEventListener('input', syncGenerateButtons);
   syncGenerateButtons();
 
   function syncTemplateFields() {

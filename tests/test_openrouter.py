@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import io
 import json
 from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
+from PIL import Image
 
 from identika.config import settings
 from identika.models import CreateJobRequest, ProductContext, ProductImage
@@ -35,13 +38,17 @@ def _png_bytes() -> bytes:
 
 
 def _png_data_uri() -> str:
-    png = bytes.fromhex(
-        "89504e470d0a1a0a0000000d49484452000000010000000108020000009077"
-        "530000000a49444154789c6260000000020001e221bc330000000049454e44ae426082"
-    )
-    import base64
+    buf = io.BytesIO()
+    Image.new("RGB", (512, 512), "#eef2ff").save(buf, format="PNG")
+    png = buf.getvalue()
 
     return f"data:image/png;base64,{base64.b64encode(png).decode('ascii')}"
+
+
+def _jpeg_data_uri(width: int = 512, height: int = 512) -> str:
+    buf = io.BytesIO()
+    Image.new("RGB", (width, height), "#dde7f3").save(buf, format="JPEG")
+    return f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode('ascii')}"
 
 
 def _text_plan() -> dict[str, Any]:
@@ -166,6 +173,51 @@ def test_openrouter_image_generation_stores_background_assets(tmp_path, monkeypa
     path, media_type = storage.get_asset(updated.slides[0].background_asset_id)
     assert media_type == "image/png"
     assert path.read_bytes().startswith(b"\x89PNG")
+    image = Image.open(path)
+    assert image.size == (900, 1200)
+
+
+def test_openrouter_image_generation_normalizes_jpeg_to_export_png(tmp_path, monkeypatch) -> None:
+    settings.identika_provider = "openrouter"
+    settings.openrouter_api_key = "test-key"
+    settings.identika_enable_ai_images = True
+
+    storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
+    job = storage.create_job(CreateJobRequest(product=ProductContext(title="Тест")).model_dump(mode="json"))
+    source_id = storage.add_asset(job.id, "source.png", _png_bytes(), "image/png")
+    product = ProductContext(
+        title="Тест",
+        images=[ProductImage(asset_id=source_id, role="source")],
+    )
+
+    fake_client = FakeAsyncClient()
+    fake_client.response_json = {
+        "choices": [
+            {
+                "message": {
+                    "content": "",
+                    "images": [{"image_url": {"url": _jpeg_data_uri(512, 512)}}],
+                }
+            }
+        ]
+    }
+    monkeypatch.setattr("identika.providers.image_gen.httpx.AsyncClient", lambda *a, **k: fake_client)
+
+    base_result = asyncio.run(OpenRouterProvider().generate(CreateJobRequest(product=product)))
+    base_result.product = product
+    updated = asyncio.run(
+        generate_slide_images(
+            job.id,
+            CreateJobRequest(product=product),
+            base_result,
+            storage,
+        )
+    )
+    path, media_type = storage.get_asset(updated.slides[0].background_asset_id)
+    assert media_type == "image/png"
+    image = Image.open(path)
+    assert image.format == "PNG"
+    assert image.size == (900, 1200)
 
 
 def test_openrouter_image_generation_skips_white_and_description_with_sources(

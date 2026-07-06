@@ -79,7 +79,10 @@
     <p><strong>Нет исходных фото товара.</strong> Слайды показывают заглушку «Загрузите фото товара» — не экспортируйте пакет, пока не добавите реальные фото.</p>
     <form class="job-source-upload" method="post" action="{{ base_path }}/jobs/{{ job.id }}/source-images" enctype="multipart/form-data">
       <label class="field">Загрузить фото
-        <input type="file" name="files" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple required>
+        <input type="file" name="files" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple>
+      </label>
+      <label class="field">Ссылка на фото из интернета
+        <textarea name="source_image_urls" rows="2" placeholder="https://example.com/product.jpg"></textarea>
       </label>
       <button type="submit" class="button button--accent">Прикрепить и пересобрать слайды</button>
     </form>
@@ -96,6 +99,32 @@
         {% if job.result.model %} · {{ job.result.model }}{% endif %}
       </p>
     </div>
+    {% if source_photo_status %}
+    <div class="source-photo-status source-photo-status--{{ source_photo_status.tone }}" aria-label="Статус фото товара">
+      <div>
+        <span class="source-photo-status__label">{{ source_photo_status.label }}</span>
+        <strong>{{ source_photo_status.count_label }}</strong>
+      </div>
+      <p>{{ source_photo_status.description }}</p>
+    </div>
+    {% endif %}
+    {% if readiness %}
+    <div class="readiness-panel readiness-panel--{{ readiness.tone }}" aria-label="Проверка готовности">
+      <div class="readiness-panel__head">
+        <span>Проверка готовности</span>
+        <strong>{{ readiness.label }}</strong>
+      </div>
+      <p>{{ readiness.summary }}</p>
+      <ul>
+        {% for check in readiness.checks %}
+        <li>{{ check }}</li>
+        {% endfor %}
+        {% for blocker in readiness.blockers %}
+        <li>{{ blocker }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
     <form class="job-template-switcher" method="post" action="{{ base_path }}/jobs/{{ job.id }}/template">
       <label for="job-template-select">Шаблон карточки</label>
       <div class="job-template-switcher__controls">
@@ -141,6 +170,11 @@
       <strong>{{ job.result.rich.blocks|length }}</strong>
       <span>{{ job.result.rich.blocks|length }} rich-блоков</span>
       <small>PNG 1440×900 + PDF preview</small>
+    </article>
+    <article class="metric-card metric-card--photo{% if source_photo_status and source_photo_status.needs_action %} metric-card--danger-soft{% endif %}">
+      <strong>{% if source_photo_status %}{{ source_photo_status.count }}{% else %}—{% endif %}</strong>
+      <span>{% if source_photo_status %}{{ source_photo_status.label }}{% else %}Фото товара{% endif %}</span>
+      <small>{% if source_photo_status %}{{ source_photo_status.count_label }} в источнике{% else %}JPEG/PNG source{% endif %}</small>
     </article>
     <article class="metric-card metric-card--dark">
       <strong>{% if job.result.export_asset_id %}ZIP{% else %}—{% endif %}</strong>
@@ -336,7 +370,7 @@
                   <li><strong>WB slides</strong><span>PNG 900×1200</span></li>
                   <li><strong>Rich blocks</strong><span>PNG 1440×900</span></li>
                   <li><strong>Rich HTML</strong><span>только preview, не в ZIP</span></li>
-                  <li><strong>Фото товара</strong><span>JPEG/PNG source</span></li>
+                  <li><strong>Фото товара</strong><span>{% if source_photo_status %}{{ source_photo_status.count_label }} · {{ source_photo_status.label }}{% else %}JPEG/PNG source{% endif %}</span></li>
                 </ul>
               </div>
 

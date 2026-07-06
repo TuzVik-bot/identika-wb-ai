@@ -19,6 +19,7 @@ from identika.providers.openrouter import get_provider
 from identika.services.category_templates import find_template_for_product, get_category_template
 from identika.services.product_images import (
     attach_source_images,
+    attach_source_image_urls,
     download_product_images,
     ensure_source_assets_after_download,
     has_source_assets,
@@ -369,6 +370,8 @@ class JobService:
             raise ValueError("job has no result")
         if job.status not in ("succeeded", "approved"):
             raise ValueError("approve is allowed only after successful generation")
+        if not has_source_assets(job.result.product):
+            raise ValueError("source photos are required before approve")
         if job.result.quality_mode != "final":
             job.result = self._render_assets(job_id, job.result, quality_mode="final")
             self.storage.update_result(job_id, job.result)
@@ -416,15 +419,30 @@ class JobService:
         self,
         job_id: str,
         asset_ids: list[str],
+        image_urls: list[str] | None = None,
     ) -> JobRecord:
         job = self.storage.get_job(job_id)
         if not job.result:
             raise ValueError("job has no result")
         if job.status == "approved":
             raise ValueError("approved job cannot be edited")
-        if not asset_ids:
+        image_urls = image_urls or []
+        if not asset_ids and not image_urls:
             raise ValueError("at least one source image is required")
         attach_source_images(job.result.product, asset_ids)
+        if image_urls:
+            attach_source_image_urls(job.result.product, image_urls)
+            product, image_warnings = await download_product_images(
+                job_id, job.result.product, self.storage
+            )
+            job.result.product = product
+            if image_warnings:
+                kept = [
+                    w
+                    for w in job.result.warnings
+                    if "фото" not in w.lower() and "cdn" not in w.lower()
+                ]
+                job.result.warnings = kept + image_warnings
         quality_mode: QualityMode = "final" if job.status == "approved" else "preview"
         job.result = self._render_assets(job_id, job.result, quality_mode=quality_mode)
         self.storage.update_result(job_id, job.result)

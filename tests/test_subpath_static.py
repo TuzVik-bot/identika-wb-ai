@@ -22,10 +22,11 @@ def test_dashboard_links_prefixed_static_css(subpath_client: TestClient) -> None
     home = subpath_client.get("/")
     assert home.status_code == 200
     assert 'href="/identika/static/app.css?v=' in home.text
+    assert 'href="/identika/static/favicon.svg"' in home.text
     assert "<title>Кабинет · Identika</title>" in home.text
 
 
-def test_static_css_served_at_root_and_subpath(subpath_client: TestClient) -> None:
+def test_static_assets_served_at_root_and_subpath(subpath_client: TestClient) -> None:
     root = subpath_client.get("/static/app.css")
     assert root.status_code == 200
     assert "text/css" in root.headers["content-type"]
@@ -34,6 +35,10 @@ def test_static_css_served_at_root_and_subpath(subpath_client: TestClient) -> No
     assert prefixed.status_code == 200
     assert "text/css" in prefixed.headers["content-type"]
     assert ".cabinet-header" in prefixed.text
+
+    favicon = subpath_client.get("/favicon.ico")
+    assert favicon.status_code == 200
+    assert "image/svg+xml" in favicon.headers["content-type"]
 
 
 def test_wb_tool_display_url_prefers_public_setting(tmp_path, monkeypatch) -> None:

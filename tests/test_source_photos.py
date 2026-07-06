@@ -9,8 +9,13 @@ from identika.app import create_app
 from identika.config import settings
 from identika.models import CreateJobRequest, ProductContext, ProductImage
 from identika.services.jobs import JobService
-from identika.services.product_images import SourcePhotosRequiredError, validate_can_start_generation
+from identika.services.product_images import (
+    SourcePhotosRequiredError,
+    download_product_images,
+    validate_can_start_generation,
+)
 from identika.services.rendering import render_slide_svg
+from identika.services.wb_tool import WBToolClient
 from identika.models import SlideSpec
 from identika.storage import Storage
 
@@ -95,7 +100,31 @@ def test_render_slide_without_photo_shows_upload_message() -> None:
 
 
 @pytest.mark.no_photo_inject
-def test_job_fails_after_download_without_assets(tmp_path) -> None:
+def test_job_fails_after_wb_and_internet_search_without_assets(tmp_path, monkeypatch) -> None:
+    class FakeResponse:
+        status_code = 404
+        headers = {"content-type": "application/json"}
+        content = b""
+        text = ""
+        reason_phrase = "Not Found"
+
+        def raise_for_status(self) -> None:
+            raise RuntimeError("not found")
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def get(self, url: str, **kwargs):
+            if "api.openverse.org" in url:
+                return FakeResponse()
+            return FakeResponse()
+
+    monkeypatch.setattr("identika.services.product_images.httpx.AsyncClient", lambda *a, **k: FakeClient())
+
     storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
     service = JobService(storage)
     product = ProductContext(title="Нет CDN", nm_id=999999999, sku_id=1)
@@ -132,3 +161,133 @@ def test_attach_source_images_to_job_rerenders(tmp_path) -> None:
     svg = slide_path.read_text(encoding="utf-8")
     assert "data:image/png;base64," in svg
     assert "Загрузите фото товара" not in svg
+
+
+@pytest.mark.no_photo_inject
+def test_download_product_images_falls_back_to_openverse_search(tmp_path, monkeypatch) -> None:
+    png = _png_bytes()
+
+    class FakeResponse:
+        def __init__(
+            self,
+            status_code: int,
+            *,
+            json_data: dict | None = None,
+            content: bytes = b"",
+            content_type: str = "application/json",
+        ) -> None:
+            self.status_code = status_code
+            self._json_data = json_data or {}
+            self.content = content
+            self.headers = {"content-type": content_type}
+            self.text = ""
+            self.reason_phrase = "OK"
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise RuntimeError(f"HTTP {self.status_code}")
+
+        def json(self) -> dict:
+            return self._json_data
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.closed = False
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            self.closed = True
+            return None
+
+        async def get(self, url: str, **kwargs):
+            assert not self.closed
+            if "api.openverse.org" in url:
+                params = kwargs.get("params") or {}
+                assert "Дизайнерская лампа" in params["q"]
+                return FakeResponse(
+                    200,
+                    json_data={
+                        "results": [
+                            {"url": "https://cdn.example/lamp.png", "title": "lamp"},
+                        ]
+                    },
+                )
+            if url == "https://cdn.example/lamp.png":
+                return FakeResponse(200, content=png, content_type="image/png")
+            return FakeResponse(404)
+
+    monkeypatch.setattr("identika.services.product_images.httpx.AsyncClient", lambda *a, **k: FakeClient())
+
+    storage = Storage(db_path=tmp_path / "db.sqlite", assets_dir=tmp_path / "assets")
+    product = ProductContext(
+        title="Дизайнерская лампа",
+        subject_name="Освещение",
+        nm_id=999999999,
+        sku_id=1,
+    )
+    updated, warnings = asyncio.run(download_product_images("job-openverse", product, storage))
+
+    assert updated.images[0].url == "https://cdn.example/lamp.png"
+    assert updated.images[0].asset_id
+    assert any("Openverse" in warning for warning in warnings)
+    path, media_type = storage.get_asset(updated.images[0].asset_id)
+    assert media_type == "image/png"
+    assert path.read_bytes().startswith(b"\x89PNG")
+
+
+@pytest.mark.no_photo_inject
+def test_wb_generation_accepts_internet_source_image_url(client: TestClient, monkeypatch) -> None:
+    async def fake_context(self, sku_id: int, account_id: int | None = None) -> dict:
+        return {
+            "account_id": account_id,
+            "store_slug": "demo",
+            "sku_id": sku_id,
+            "title": "Товар без фото WB",
+            "images": [],
+        }
+
+    async def fake_media(self, sku_id: int, account_id: int | None = None) -> list[str]:
+        return []
+
+    class FakeResponse:
+        status_code = 200
+        headers = {"content-type": "image/png"}
+        content = _png_bytes()
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def get(self, url: str):
+            assert url == "https://images.example/product.png"
+            return FakeResponse()
+
+    monkeypatch.setattr(WBToolClient, "product_context", fake_context)
+    monkeypatch.setattr(WBToolClient, "product_media_urls", fake_media)
+    monkeypatch.setattr("identika.services.product_images.httpx.AsyncClient", lambda *a, **k: FakeClient())
+
+    response = client.post(
+        "/wb/generate",
+        data={
+            "account_id": "1",
+            "sku_id": "77",
+            "source_image_urls": "https://images.example/product.png",
+        },
+    )
+    assert response.status_code == 303
+    assert response.headers["location"].startswith("/jobs/")
+
+    job_id = response.headers["location"].split("/")[-1]
+    result = client.get(f"/v1/generation/jobs/{job_id}/result")
+    assert result.status_code == 200
+    product_images = result.json()["product"]["images"]
+    assert product_images[0]["url"] == "https://images.example/product.png"
+    assert product_images[0]["asset_id"]

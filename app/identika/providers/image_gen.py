@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
 import re
 
 import httpx
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from identika.config import EffectiveSettings
 from identika.models import CreateJobRequest, GenerationResult
@@ -43,7 +45,11 @@ async def generate_slide_images(
             continue
         attempted += 1
         try:
-            image_bytes = await _call_image_model(slide, request, source_refs, storage, eff)
+            image_bytes = _normalize_slide_image(
+                await _call_image_model(slide, request, source_refs, storage, eff),
+                width=slide.width,
+                height=slide.height,
+            )
             asset_id = storage.add_asset(
                 job_id,
                 f"slide_{slide.index:02d}_bg.png",
@@ -134,6 +140,23 @@ def _decode_image_url(url: str) -> bytes:
             raise ValueError("invalid data URI in image response")
         return base64.b64decode(match.group(1))
     raise ValueError("remote image URLs are not supported in image response")
+
+
+def _normalize_slide_image(image_bytes: bytes, *, width: int = 900, height: int = 1200) -> bytes:
+    try:
+        image = Image.open(io.BytesIO(image_bytes))
+        image = ImageOps.exif_transpose(image).convert("RGB")
+    except (OSError, UnidentifiedImageError, ValueError) as exc:
+        raise ValueError("OpenRouter image response was not a valid raster image") from exc
+    image = ImageOps.fit(
+        image,
+        (width, height),
+        method=Image.Resampling.LANCZOS,
+        centering=(0.5, 0.5),
+    )
+    output = io.BytesIO()
+    image.save(output, format="PNG", optimize=True)
+    return output.getvalue()
 
 
 def _headers(eff: EffectiveSettings) -> dict[str, str]:

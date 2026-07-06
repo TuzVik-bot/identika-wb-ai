@@ -15,6 +15,15 @@ def _png_bytes() -> bytes:
 @pytest.fixture(autouse=True)
 def inject_product_photo_when_download_empty(monkeypatch, request) -> None:
     """Keep legacy tests working when WB CDN is unreachable in CI."""
+    if not request.node.get_closest_marker("no_photo_inject"):
+        async def _empty_openverse(*args, **kwargs):
+            return []
+
+        monkeypatch.setattr(
+            "identika.services.product_images._search_openverse_image_urls",
+            _empty_openverse,
+        )
+
     if request.node.get_closest_marker("no_photo_inject"):
         return
 

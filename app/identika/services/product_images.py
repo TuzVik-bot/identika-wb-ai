@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlparse
 
 import httpx
 
@@ -12,6 +13,7 @@ logger = logging.getLogger("identika.product_images")
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 MIN_PRODUCT_IMAGE_BYTES = 64
+MAX_SOURCE_IMAGE_URLS = 4
 ALLOWED_CONTENT_TYPES = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -24,6 +26,7 @@ DOWNLOAD_HEADERS = {
     ),
     "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
 }
+OPENVERSE_IMAGES_URL = "https://api.openverse.org/v1/images/"
 
 
 def attach_source_images(product: ProductContext, asset_ids: list[str]) -> ProductContext:
@@ -35,6 +38,37 @@ def attach_source_images(product: ProductContext, asset_ids: list[str]) -> Produ
             continue
         images.append(ProductImage(asset_id=clean, role="source"))
         existing.add(clean)
+    product.images = images
+    return product
+
+
+def validate_source_image_urls(
+    urls: list[str],
+    *,
+    max_urls: int = MAX_SOURCE_IMAGE_URLS,
+) -> list[str]:
+    clean_urls: list[str] = []
+    for url in urls:
+        clean = url.strip()
+        if not clean or clean in clean_urls:
+            continue
+        parsed = urlparse(clean)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError(f"invalid image URL: {clean}")
+        clean_urls.append(clean)
+    if len(clean_urls) > max_urls:
+        raise ValueError(f"maximum {max_urls} source image URLs allowed")
+    return clean_urls
+
+
+def attach_source_image_urls(product: ProductContext, urls: list[str]) -> ProductContext:
+    images = list(product.images)
+    existing_urls = {img.url for img in images if img.url}
+    for index, clean in enumerate(validate_source_image_urls(urls), start=1):
+        if clean in existing_urls:
+            continue
+        images.append(ProductImage(url=clean, role="source", alt=f"Internet photo {index}"))
+        existing_urls.add(clean)
     product.images = images
     return product
 
@@ -176,12 +210,79 @@ def _resolve_content_type(raw_header: str, data: bytes) -> tuple[str, str] | Non
     return _detect_image_type(data)
 
 
+def _internet_image_search_query(product: ProductContext) -> str:
+    parts = [
+        (product.title or "").strip(),
+        (product.subject_name or "").strip(),
+        (product.brand or "").strip(),
+    ]
+    query = " ".join(part for part in parts if part)
+    return " ".join(query.split())[:140]
+
+
+async def _search_openverse_image_urls(
+    client: httpx.AsyncClient,
+    product: ProductContext,
+    *,
+    limit: int = 6,
+) -> list[str]:
+    query = _internet_image_search_query(product)
+    if not query:
+        return []
+    try:
+        response = await client.get(
+            OPENVERSE_IMAGES_URL,
+            params={
+                "q": query,
+                "page_size": limit,
+                "mature": "false",
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+    except (httpx.HTTPError, ValueError, TypeError, RuntimeError):
+        return []
+    urls: list[str] = []
+    seen: set[str] = set()
+    for item in data.get("results", []):
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url") or item.get("thumbnail") or "").strip()
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc or url in seen:
+            continue
+        seen.add(url)
+        urls.append(url)
+    return urls
+
+
+async def _download_openverse_source_image(
+    client: httpx.AsyncClient,
+    job_id: str,
+    product: ProductContext,
+    storage: Storage,
+) -> tuple[ProductImage | None, str | None]:
+    for index, url in enumerate(await _search_openverse_image_urls(client, product), start=1):
+        downloaded = await _download_image_bytes(client, url)
+        if not downloaded:
+            continue
+        data, content_type = downloaded
+        suffix = ALLOWED_CONTENT_TYPES.get(content_type, ".jpg")
+        asset_id = storage.add_asset(job_id, f"internet_product_{index:02d}{suffix}", data, content_type)
+        image = ProductImage(url=url, asset_id=asset_id, role="source", alt=f"Openverse photo {index}")
+        warning = (
+            "Фото товара найдено через Openverse image search. "
+            "Проверьте, что изображение действительно соответствует товару, перед экспортом."
+        )
+        return image, warning
+    return None, None
+
+
 async def _download_image_bytes(client: httpx.AsyncClient, url: str) -> tuple[bytes, str] | None:
     candidates = [url]
     if "/images/big/" in url:
-        base = url.rsplit(".", 1)[0]
         ext = url.rsplit(".", 1)[-1].lower() if "." in url else ""
-        
+
         # Build host variants
         hosts = []
         if "wbbasket.ru" in url:
@@ -193,9 +294,9 @@ async def _download_image_bytes(client: httpx.AsyncClient, url: str) -> tuple[by
         elif "wbstatic.net" in url:
             hosts.append(url.replace("wbstatic.net", "wbbasket.ru"))
             hosts.append(url.replace("wbstatic.net", "wb.ru"))
-            
+
         candidates.extend(hosts)
-        
+
         # Add extension variants for all hosts
         ext_variants = []
         for c in candidates:
@@ -205,7 +306,7 @@ async def _download_image_bytes(client: httpx.AsyncClient, url: str) -> tuple[by
             elif ext == "jpg":
                 ext_variants.append(f"{c_base}.webp")
         candidates.extend(ext_variants)
-        
+
     seen: set[str] = set()
     for candidate in candidates:
         if candidate in seen:
@@ -297,17 +398,29 @@ async def download_product_images(
             image.asset_id = asset_id
             if not image.role:
                 image.role = "source"
-    downloaded_images = [img for img in images if img.asset_id and img.role == "source"]
-    if downloaded_images:
-        downloaded_images.sort(key=_source_image_sort_key)
-        product.images = downloaded_images
-    elif existing_sources:
-        product.images = existing_sources
-    elif not needs_cdn_fallback:
-        product.images = images
-    else:
-        product.images = []
-    source_assets = [img for img in product.images if img.role == "source" and img.asset_id]
+        downloaded_images = [img for img in images if img.asset_id and img.role == "source"]
+        if downloaded_images:
+            downloaded_images.sort(key=_source_image_sort_key)
+            product.images = downloaded_images
+        elif existing_sources:
+            product.images = existing_sources
+        elif not needs_cdn_fallback:
+            product.images = images
+        else:
+            product.images = []
+        source_assets = [img for img in product.images if img.role == "source" and img.asset_id]
+        if not source_assets and needs_cdn_fallback:
+            internet_image, internet_warning = await _download_openverse_source_image(
+                client,
+                job_id,
+                product,
+                storage,
+            )
+            if internet_image:
+                product.images = [internet_image]
+                source_assets = [internet_image]
+                if internet_warning:
+                    warnings.append(internet_warning)
     if not source_assets and had_explicit_urls:
         warnings.append(
             "Фото товара WB недоступны по переданным URL — слайды будут без исходного фото (проверьте URL или загрузите фото вручную)."

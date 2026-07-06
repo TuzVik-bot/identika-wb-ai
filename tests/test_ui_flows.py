@@ -112,6 +112,12 @@ def test_redesigned_job_page_elements(client: TestClient) -> None:
     assert "PNG 1440×900" in page_html
     assert "только preview, не в ZIP" in page_html
     assert "slides/slide_01.png" in page_html
+    assert "source-photo-status" in page_html
+    assert "Фото подключены" in page_html
+    assert "source-photo-status--ok" in page_html
+    assert "readiness-panel" in page_html
+    assert "Готово к approve" in page_html
+    assert "10 слайдов готовы" in page_html
 
 
 def test_edit_flow_with_accordion(client: TestClient) -> None:
@@ -182,6 +188,16 @@ def test_create_page_keeps_selected_category_template(client: TestClient) -> Non
     assert 'value="cable-default" selected' in page.text
     assert 'name="category_template_id" class="category-template-id-field" value="cable-default"' in page.text
     assert "/wb/generate" in page.text
+
+
+def test_create_page_allows_wb_generation_before_manual_upload(client: TestClient) -> None:
+    page = client.get("/create?account_id=1&q=товар")
+    assert page.status_code == 200
+    assert "wb-generate-btn" in page.text
+    assert 'button type="submit" class="button wb-generate-btn" disabled' not in page.text
+    assert "Сначала попробуем фото из WB" in page.text
+    assert "source-image-urls-input" in page.text
+    assert 'name="source_image_urls" class="source-image-urls-field"' in page.text
 
 
 def test_job_page_applies_category_template(client: TestClient) -> None:
@@ -294,3 +310,101 @@ def test_templates_page_refuses_builtin_overwrite(client: TestClient) -> None:
     assert "Встроенный ID защищён" in page.text
     assert "Кабель: техно-рамка" in page.text
     assert "Перезаписанный кабель" not in page.text
+
+
+@pytest.mark.no_photo_inject
+def test_job_page_shows_missing_source_photo_status(client: TestClient) -> None:
+    created = client.post(
+        "/v1/generation/jobs",
+        json={
+            "product": {
+                "store_slug": "test",
+                "sku_id": 77,
+                "title": "Без фото",
+            },
+            "allow_generate_without_photos": True,
+        },
+    )
+    assert created.status_code == 200
+
+    page = client.get(f"/jobs/{created.json()['id']}")
+    assert page.status_code == 200
+    assert "source-photo-status" in page.text
+    assert "source-photo-status--warning" in page.text
+    assert "Фото отсутствуют" in page.text
+    assert "0 фото" in page.text
+    assert "Ссылка на фото из интернета" in page.text
+    assert 'name="source_image_urls"' in page.text
+    assert "Прикрепить и пересобрать слайды" in page.text
+    assert "readiness-panel" in page.text
+    assert "Нужно фото товара" in page.text
+
+
+@pytest.mark.no_photo_inject
+def test_missing_source_photos_block_approve_and_export(client: TestClient) -> None:
+    created = client.post(
+        "/v1/generation/jobs",
+        json={
+            "product": {
+                "store_slug": "test",
+                "sku_id": 77,
+                "title": "Без фото",
+            },
+            "allow_generate_without_photos": True,
+        },
+    )
+    assert created.status_code == 200
+    job_id = created.json()["id"]
+
+    approve = client.post(f"/v1/generation/jobs/{job_id}/approve")
+    assert approve.status_code == 409
+    assert "source photos" in approve.json()["detail"]
+
+    export = client.get(f"/v1/generation/jobs/{job_id}/export")
+    assert export.status_code == 409
+    assert "approve" in export.json()["detail"]
+
+    rich_export = client.get(f"/v1/generation/jobs/{job_id}/rich-export")
+    assert rich_export.status_code == 409
+    assert "approve" in rich_export.json()["detail"]
+
+
+@pytest.mark.no_photo_inject
+def test_source_photo_url_input_is_limited_and_validated(client: TestClient) -> None:
+    created = client.post(
+        "/v1/generation/jobs",
+        json={
+            "product": {
+                "store_slug": "test",
+                "sku_id": 78,
+                "title": "Без фото",
+            },
+            "allow_generate_without_photos": True,
+        },
+    )
+    assert created.status_code == 200
+    job_id = created.json()["id"]
+
+    too_many = client.post(
+        f"/v1/generation/jobs/{job_id}/source-images",
+        data={
+            "source_image_urls": "\n".join(
+                [
+                    "https://images.example/1.png",
+                    "https://images.example/2.png",
+                    "https://images.example/3.png",
+                    "https://images.example/4.png",
+                    "https://images.example/5.png",
+                ]
+            )
+        },
+    )
+    assert too_many.status_code == 409
+    assert "maximum 4" in too_many.json()["detail"]
+
+    invalid = client.post(
+        f"/v1/generation/jobs/{job_id}/source-images",
+        data={"source_image_urls": "not-a-url"},
+    )
+    assert invalid.status_code == 409
+    assert "invalid image URL" in invalid.json()["detail"]

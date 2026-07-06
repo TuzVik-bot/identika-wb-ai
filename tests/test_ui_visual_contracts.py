@@ -34,6 +34,8 @@ def test_desktop_and_mobile_layout_contracts_are_kept() -> None:
         ".create-workspace",
         ".job-layout--wide",
         ".job-tabs",
+        ".source-photo-status",
+        ".readiness-panel",
         ".rich-visual-grid",
         ".templates-grid",
         ".template-card",
@@ -63,9 +65,12 @@ def test_key_pages_keep_visual_regression_markers() -> None:
     assert "topbar__burger" in base
     assert "topbar-open" in base
     assert "source-upload-form" in create
+    assert "source-image-urls-input" in create
     assert "category-template-select" in create
     assert "category-template-id-field" in create
     assert "job-layout--wide" in job
+    assert "source-photo-status" in job
+    assert "readiness-panel" in job
     assert "data-tab=\"slides\"" in job
     assert "data-tab=\"rich\"" in job
     assert "data-tab=\"export\"" in job

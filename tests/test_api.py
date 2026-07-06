@@ -121,7 +121,8 @@ def test_ui_smoke_pages_demo_redirect_edit_approve_export_and_assets(client: Tes
     assert "Export ZIP" in job_page.text
     assert "10 слайдов" in job_page.text
     assert f"/v1/generation/jobs/{job_id}/approve" in job_page.text
-    assert f"/v1/generation/jobs/{job_id}/export" in job_page.text
+    assert f"/v1/generation/jobs/{job_id}/export" not in job_page.text
+    assert 'aria-disabled="true"' in job_page.text
     assert "/v1/assets/" in job_page.text
 
     result = client.get(f"/v1/generation/jobs/{job_id}/result")
@@ -158,6 +159,7 @@ def test_ui_smoke_pages_demo_redirect_edit_approve_export_and_assets(client: Tes
     approved_page = client.get(f"/jobs/{job_id}")
     assert approved_page.status_code == 200
     assert f"/jobs/{job_id}/slides/1/text" not in approved_page.text
+    assert f"/v1/generation/jobs/{job_id}/export" in approved_page.text
 
     export = client.get(f"/v1/generation/jobs/{job_id}/export")
     assert export.status_code == 200

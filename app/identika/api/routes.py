@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from urllib.parse import quote
 
 import httpx
@@ -21,7 +22,9 @@ from identika.services.jobs import JobService
 from identika.services.product_images import (
     SourcePhotosRequiredError,
     attach_source_images,
-    has_source_assets,
+    attach_source_image_urls,
+    count_source_assets,
+    validate_source_image_urls,
     validate_can_start_generation,
 )
 from identika.services.uploads import save_source_images
@@ -72,6 +75,121 @@ def parse_source_image_ids(*values: str | None) -> list[str]:
             if clean and clean not in ids:
                 ids.append(clean)
     return ids
+
+
+def parse_source_image_urls(*values: str | None) -> list[str]:
+    urls: list[str] = []
+    for value in values:
+        if not value:
+            continue
+        for part in value.replace(",", "\n").splitlines():
+            clean = part.strip()
+            if clean and clean not in urls:
+                urls.append(clean)
+    return validate_source_image_urls(urls)
+
+
+def photo_error_redirect(
+    account_id: int,
+    brief: str,
+    category_template_id: str,
+    error: str,
+) -> RedirectResponse:
+    return RedirectResponse(
+        url=url(
+            f"/create?account_id={account_id}&brief={quote(brief)}"
+            f"&category_template_id={quote(category_template_id.strip())}"
+            f"&photo_error={quote(error)}"
+        ),
+        status_code=303,
+    )
+
+
+def source_photo_status(product: ProductContext) -> dict[str, str | int | bool]:
+    source_count = count_source_assets(product)
+    pending_urls = sum(
+        1
+        for image in product.images
+        if image.role == "source" and image.url and not image.asset_id
+    )
+    if source_count:
+        return {
+            "state": "ok",
+            "tone": "ok",
+            "label": "Фото подключены",
+            "count": source_count,
+            "count_label": f"{source_count} фото",
+            "description": "Слайды и экспорт используют исходные изображения товара.",
+            "needs_action": False,
+        }
+    if pending_urls:
+        return {
+            "state": "pending_url",
+            "tone": "warning",
+            "label": "Фото не скачались",
+            "count": 0,
+            "count_label": "0 фото",
+            "description": (
+                f"Найдено URL фото: {pending_urls}, но файлы не сохранены. "
+                "Загрузите фото вручную и пересоберите слайды."
+            ),
+            "needs_action": True,
+        }
+    return {
+        "state": "missing",
+        "tone": "warning",
+        "label": "Фото отсутствуют",
+        "count": 0,
+        "count_label": "0 фото",
+        "description": "Пакет собран без исходного фото товара. Добавьте реальные фото перед экспортом.",
+        "needs_action": True,
+    }
+
+
+def result_readiness(result) -> dict[str, str | list[str]]:
+    blockers: list[str] = []
+    checks: list[str] = []
+    source_count = count_source_assets(result.product)
+    if source_count:
+        checks.append(f"{source_count} фото товара подключено")
+    else:
+        blockers.append("Нужно фото товара")
+
+    if len(result.slides) == 10 and all(slide.asset_id for slide in result.slides):
+        checks.append("10 слайдов готовы")
+    else:
+        blockers.append("Нужно пересобрать 10 слайдов")
+
+    if result.rich.blocks and result.rich.zip_asset_id:
+        checks.append(f"{len(result.rich.blocks)} rich-блоков готовы")
+    else:
+        blockers.append("Нужно пересобрать Rich-пакет")
+
+    if result.export_asset_id:
+        checks.append("Export ZIP собран")
+    else:
+        blockers.append("Нужно собрать Export ZIP")
+
+    if blockers:
+        tone = "danger"
+        label = blockers[0]
+        summary = "Перед approve исправьте критичные пункты."
+    elif result.warnings:
+        tone = "warning"
+        label = "Готово к approve"
+        summary = "Можно утверждать, но проверьте предупреждения оператора."
+    else:
+        tone = "ok"
+        label = "Готово к approve"
+        summary = "Пакет готов к финализации и экспорту."
+
+    return {
+        "tone": tone,
+        "label": label,
+        "summary": summary,
+        "checks": checks,
+        "blockers": blockers,
+    }
 
 
 def dashboard_stats(jobs: list) -> dict[str, int]:
@@ -184,6 +302,12 @@ async def health(request: Request) -> JSONResponse:
         },
         headers=NO_CACHE_HEADERS,
     )
+
+
+@router.get("/favicon.ico", include_in_schema=False)
+async def favicon() -> FileResponse:
+    favicon_path = Path(__file__).resolve().parents[1] / "static" / "favicon.svg"
+    return FileResponse(favicon_path, media_type="image/svg+xml")
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -357,15 +481,18 @@ async def job_page(request: Request, job_id: str) -> HTMLResponse:
         job = service(request).get_job(job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="job not found") from None
-    can_edit = bool(job.result and job.status != "approved")
-    can_approve = bool(job.result and job.status != "approved")
-    can_export = bool(job.result and job.result.export_asset_id)
-    can_rich_export = bool(job.result and job.result.rich.zip_asset_id)
-    can_upload = bool(job.result and job.status == "approved" and can_export)
     upload_status = request.query_params.get("upload", "")
     upload_detail = request.query_params.get("upload_detail", "")
     upload_status_code = request.query_params.get("upload_status_code", "")
-    missing_source_photos = bool(job.result and not has_source_assets(job.result.product))
+    photo_status = source_photo_status(job.result.product) if job.result else None
+    missing_source_photos = bool(photo_status and photo_status["needs_action"])
+    readiness = result_readiness(job.result) if job.result else None
+    readiness_blocked = bool(readiness and readiness["blockers"])
+    can_edit = bool(job.result and job.status != "approved")
+    can_approve = bool(job.result and job.status != "approved" and not readiness_blocked)
+    can_export = bool(job.result and job.status == "approved" and job.result.export_asset_id)
+    can_rich_export = bool(job.result and job.status == "approved" and job.result.rich.zip_asset_id)
+    can_upload = bool(job.result and job.status == "approved" and can_export)
     return apply_no_cache(
         request.app.state.templates.TemplateResponse(
             request,
@@ -384,6 +511,8 @@ async def job_page(request: Request, job_id: str) -> HTMLResponse:
                 "upload_detail": upload_detail,
                 "upload_status_code": upload_status_code,
                 "missing_source_photos": missing_source_photos,
+                "source_photo_status": photo_status,
+                "readiness": readiness,
                 "category_templates": list_category_template_views(service(request).storage),
             },
         )
@@ -456,9 +585,14 @@ async def generate_from_wb(
     sku_id: int = Form(...),
     brief: str = Form(""),
     source_image_asset_ids: str = Form(""),
+    source_image_urls: str = Form(""),
     allow_generate_without_photos: str = Form(""),
     category_template_id: str = Form(""),
 ) -> RedirectResponse:
+    try:
+        internet_urls = parse_source_image_urls(source_image_urls)
+    except ValueError as exc:
+        return photo_error_redirect(account_id, brief, category_template_id, str(exc))
     try:
         wb = WBToolClient()
         product, _image_notes = await wb.resolve_product_images(
@@ -470,18 +604,12 @@ async def generate_from_wb(
         raise HTTPException(status_code=502, detail=f"WB Tool error: {type(exc).__name__}") from exc
     uploaded_ids = parse_source_image_ids(source_image_asset_ids)
     attach_source_images(product, uploaded_ids)
+    attach_source_image_urls(product, internet_urls)
     allow_without = allow_generate_without_photos in {"1", "true", "on", "yes"}
     try:
         validate_can_start_generation(product, allow_without_photos=allow_without)
     except SourcePhotosRequiredError as exc:
-        return RedirectResponse(
-            url=url(
-                f"/create?account_id={account_id}&brief={quote(brief)}"
-                f"&category_template_id={quote(category_template_id.strip())}"
-                f"&photo_error={quote(str(exc))}"
-            ),
-            status_code=303,
-        )
+        return photo_error_redirect(account_id, brief, category_template_id, str(exc))
     try:
         job = await service(request).create_job(
             CreateJobRequest(
@@ -496,14 +624,7 @@ async def generate_from_wb(
             background_tasks=background_tasks,
         )
     except SourcePhotosRequiredError as exc:
-        return RedirectResponse(
-            url=url(
-                f"/create?account_id={account_id}&brief={quote(brief)}"
-                f"&category_template_id={quote(category_template_id.strip())}"
-                f"&photo_error={quote(str(exc))}"
-            ),
-            status_code=303,
-        )
+        return photo_error_redirect(account_id, brief, category_template_id, str(exc))
     return RedirectResponse(url=url(f"/jobs/{job.id}"), status_code=303)
 
 
@@ -540,13 +661,18 @@ async def attach_job_source_images_api(
     job_id: str,
     source_image_asset_ids: str = Form(""),
     files: list[UploadFile] = File(default=[]),
+    source_image_urls: str = Form(""),
 ) -> JSONResponse:
     asset_ids = parse_source_image_ids(source_image_asset_ids)
+    try:
+        internet_urls = parse_source_image_urls(source_image_urls)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if files:
         upload = await save_source_images(service(request).storage, files)
         asset_ids.extend(upload["asset_ids"])
     try:
-        job = await service(request).attach_source_images_to_job(job_id, asset_ids)
+        job = await service(request).attach_source_images_to_job(job_id, asset_ids, internet_urls)
     except KeyError:
         raise HTTPException(status_code=404, detail="job not found") from None
     except ValueError as exc:
@@ -571,13 +697,18 @@ async def attach_job_source_images_page(
     job_id: str,
     source_image_asset_ids: str = Form(""),
     files: list[UploadFile] = File(default=[]),
+    source_image_urls: str = Form(""),
 ) -> RedirectResponse:
     asset_ids = parse_source_image_ids(source_image_asset_ids)
+    try:
+        internet_urls = parse_source_image_urls(source_image_urls)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if files:
         upload = await save_source_images(service(request).storage, files)
         asset_ids.extend(upload["asset_ids"])
     try:
-        await service(request).attach_source_images_to_job(job_id, asset_ids)
+        await service(request).attach_source_images_to_job(job_id, asset_ids, internet_urls)
     except KeyError:
         raise HTTPException(status_code=404, detail="job not found") from None
     except ValueError as exc:
@@ -749,6 +880,8 @@ async def export_generation_job(request: Request, job_id: str) -> FileResponse:
         job = service(request).get_job(job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="job not found") from None
+    if job.status != "approved":
+        raise HTTPException(status_code=409, detail="export is allowed only after approve")
     if not job.result or not job.result.export_asset_id:
         raise HTTPException(status_code=409, detail=f"job is {job.status}")
     path, media_type = service(request).storage.get_asset(job.result.export_asset_id)
@@ -761,6 +894,8 @@ async def rich_export_generation_job(request: Request, job_id: str) -> FileRespo
         job = service(request).get_job(job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="job not found") from None
+    if job.status != "approved":
+        raise HTTPException(status_code=409, detail="rich export is allowed only after approve")
     if not job.result or not job.result.rich.zip_asset_id:
         raise HTTPException(status_code=409, detail=f"job is {job.status}")
     path, media_type = service(request).storage.get_asset(job.result.rich.zip_asset_id)
