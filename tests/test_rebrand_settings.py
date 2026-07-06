@@ -96,6 +96,8 @@ def test_dynamic_routes_send_no_store_cache_control(client: TestClient) -> None:
     job_id = demo.headers["location"].split("/")[-1]
 
     for path in (
+        "/",
+        "/create",
         f"/jobs/{job_id}",
         f"/v1/generation/jobs/{job_id}",
         f"/v1/generation/jobs/{job_id}/result",

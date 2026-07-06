@@ -318,24 +318,26 @@ async def index(request: Request) -> HTMLResponse:
     if project_status not in {"", *PROJECT_STATUS_FILTERS}:
         project_status = ""
     filtered_jobs = filter_dashboard_jobs(jobs, project_query, project_status)
-    return request.app.state.templates.TemplateResponse(
-        request,
-        "index.html",
-        {
-            "jobs": jobs,
-            "project_jobs": filtered_jobs,
-            "project_query": project_query,
-            "project_status": project_status,
-            "project_status_tabs": dashboard_status_tabs(jobs, project_status, project_query),
-            "stats": dashboard_stats(jobs),
-            "account": {"name": "Локальный кабинет", "support_code": "314046"},
-            "wb_tool_base_url": settings.wb_tool_base_url,
-            "wb_tool_display_url": settings.wb_tool_display_url,
-            "integration_status": "Настроен" if settings.wb_tool_base_url else "Не настроен",
-            "base_path": settings.public_base_path,
-            "active_page": "dashboard",
-            "page_title": "Кабинет",
-        },
+    return apply_no_cache(
+        request.app.state.templates.TemplateResponse(
+            request,
+            "index.html",
+            {
+                "jobs": jobs,
+                "project_jobs": filtered_jobs,
+                "project_query": project_query,
+                "project_status": project_status,
+                "project_status_tabs": dashboard_status_tabs(jobs, project_status, project_query),
+                "stats": dashboard_stats(jobs),
+                "account": {"name": "Локальный кабинет", "support_code": "314046"},
+                "wb_tool_base_url": settings.wb_tool_base_url,
+                "wb_tool_display_url": settings.wb_tool_display_url,
+                "integration_status": "Настроен" if settings.wb_tool_base_url else "Не настроен",
+                "base_path": settings.public_base_path,
+                "active_page": "dashboard",
+                "page_title": "Кабинет",
+            },
+        )
     )
 
 
@@ -472,7 +474,7 @@ async def create_page(request: Request) -> HTMLResponse:
             "photo_error": request.query_params.get("photo_error", ""),
         }
     )
-    return request.app.state.templates.TemplateResponse(request, "create.html", context)
+    return apply_no_cache(request.app.state.templates.TemplateResponse(request, "create.html", context))
 
 
 @router.get("/jobs/{job_id}", response_class=HTMLResponse)
