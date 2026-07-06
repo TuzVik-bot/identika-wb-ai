@@ -2368,6 +2368,7 @@ code {
 }
 
 .templates-page {
+  min-width: 0;
   max-width: 1120px;
 }
 
@@ -2375,6 +2376,7 @@ code {
   display: grid;
   grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
   gap: 18px;
+  min-width: 0;
 }
 
 .template-builder {
@@ -2382,6 +2384,7 @@ code {
   grid-template-columns: minmax(0, 1fr) minmax(180px, 220px);
   gap: 18px;
   align-items: start;
+  min-width: 0;
 }
 
 .template-builder__fields {
@@ -2397,6 +2400,7 @@ code {
 .templates-list {
   display: grid;
   gap: 14px;
+  min-width: 0;
   padding: 24px;
 }
 
@@ -2410,6 +2414,7 @@ code {
   grid-template-columns: 150px minmax(0, 1fr);
   gap: 16px;
   align-items: center;
+  min-width: 0;
   padding: 14px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-md);
@@ -2579,6 +2584,15 @@ code {
 }
 
 @media (max-width: 640px) {
+  .templates-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-hero,
+  .templates-list {
+    padding: 18px;
+  }
+
   .template-builder {
     grid-template-columns: 1fr;
   }
