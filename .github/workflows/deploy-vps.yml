@@ -100,4 +100,5 @@ jobs:
         run: |
           set -euo pipefail
           curl -fsS -u "$BASIC_USER:$BASIC_PASSWORD" https://eurasia-transline.online/identika/health
-          curl -fsS -u "$BASIC_USER:$BASIC_PASSWORD" https://eurasia-transline.online/identika/templates | grep -q 'data-live-preview'
+          templates_page="$(curl -fsS -u "$BASIC_USER:$BASIC_PASSWORD" https://eurasia-transline.online/identika/templates)"
+          grep -q 'data-live-preview' <<< "$templates_page"
