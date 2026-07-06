@@ -21,7 +21,6 @@ from identika.services.product_images import (
     attach_source_images,
     attach_source_image_urls,
     download_product_images,
-    ensure_source_assets_after_download,
     has_source_assets,
     prepare_job_request,
     validate_can_start_generation,
@@ -83,10 +82,6 @@ class JobService:
         try:
             request.product, image_warnings = await download_product_images(
                 job_id, request.product, self.storage
-            )
-            ensure_source_assets_after_download(
-                request.product,
-                allow_without_photos=request.allow_generate_without_photos,
             )
             provider = get_provider(self.storage)
             result = await provider.generate(request, eff)

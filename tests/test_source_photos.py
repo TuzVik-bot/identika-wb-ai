@@ -100,7 +100,7 @@ def test_render_slide_without_photo_shows_upload_message() -> None:
 
 
 @pytest.mark.no_photo_inject
-def test_job_fails_after_wb_and_internet_search_without_assets(tmp_path, monkeypatch) -> None:
+def test_job_continues_after_wb_and_internet_search_without_assets(tmp_path, monkeypatch) -> None:
     class FakeResponse:
         status_code = 404
         headers = {"content-type": "application/json"}
@@ -128,15 +128,19 @@ def test_job_fails_after_wb_and_internet_search_without_assets(tmp_path, monkeyp
     storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
     service = JobService(storage)
     product = ProductContext(title="Нет CDN", nm_id=999999999, sku_id=1)
-    with pytest.raises(SourcePhotosRequiredError):
-        asyncio.run(
-            service.create_job(
-                CreateJobRequest(product=product, allow_generate_without_photos=False)
-            )
+    job = asyncio.run(
+        service.create_job(
+            CreateJobRequest(product=product, allow_generate_without_photos=False)
         )
-    jobs = storage.list_jobs()
-    assert jobs
-    assert jobs[0].status == "failed"
+    )
+
+    assert job.status == "succeeded"
+    assert job.result is not None
+    assert len(job.result.slides) == 10
+    assert not job.result.product.images
+    assert any("загрузите фото вручную" in warning.lower() for warning in job.result.warnings)
+    slide_path, _ = storage.get_asset(job.result.slides[0].asset_id)
+    assert "Загрузите фото товара" in slide_path.read_text(encoding="utf-8")
 
 
 def test_attach_source_images_to_job_rerenders(tmp_path) -> None:
