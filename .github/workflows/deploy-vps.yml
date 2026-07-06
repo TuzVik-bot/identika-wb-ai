@@ -23,7 +23,7 @@ jobs:
 
       - name: Deploy app
         env:
-          VPS_HOST: ${{ secrets.IDENTIKA_VPS_HOST }}
+          VPS_HOST: eurasia-transline.online
           VPS_PORT: ${{ secrets.IDENTIKA_VPS_PORT }}
           VPS_USER: ${{ secrets.IDENTIKA_VPS_USER }}
           SSHPASS: ${{ secrets.IDENTIKA_VPS_PASSWORD }}
@@ -84,7 +84,7 @@ jobs:
       - name: Re-render existing jobs
         if: ${{ inputs.rerender_jobs == 'true' }}
         env:
-          VPS_HOST: ${{ secrets.IDENTIKA_VPS_HOST }}
+          VPS_HOST: eurasia-transline.online
           VPS_PORT: ${{ secrets.IDENTIKA_VPS_PORT }}
           VPS_USER: ${{ secrets.IDENTIKA_VPS_USER }}
           SSHPASS: ${{ secrets.IDENTIKA_VPS_PASSWORD }}
