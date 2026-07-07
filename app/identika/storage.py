@@ -154,6 +154,13 @@ class Storage:
             raise KeyError(job_id)
         return self._row_to_job(row)
 
+    def get_job_request_payload(self, job_id: str) -> dict[str, Any]:
+        with self._connect() as conn:
+            row = conn.execute("SELECT request_json FROM jobs WHERE id=?", (job_id,)).fetchone()
+        if row is None:
+            raise KeyError(job_id)
+        return json.loads(row["request_json"])
+
     def delete_job(self, job_id: str) -> None:
         with self._connect() as conn:
             row = conn.execute("SELECT id FROM jobs WHERE id=?", (job_id,)).fetchone()

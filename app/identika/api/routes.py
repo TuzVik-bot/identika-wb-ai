@@ -660,6 +660,7 @@ async def create_generation_job(
 @router.post("/v1/generation/jobs/{job_id}/source-images")
 async def attach_job_source_images_api(
     request: Request,
+    background_tasks: BackgroundTasks,
     job_id: str,
     source_image_asset_ids: str = Form(""),
     files: list[UploadFile] = File(default=[]),
@@ -674,7 +675,18 @@ async def attach_job_source_images_api(
         upload = await save_source_images(service(request).storage, files)
         asset_ids.extend(upload["asset_ids"])
     try:
-        job = await service(request).attach_source_images_to_job(job_id, asset_ids, internet_urls)
+        existing = service(request).get_job(job_id)
+        if existing.result:
+            job = await service(request).attach_source_images_to_job(job_id, asset_ids, internet_urls)
+        else:
+            if not asset_ids and not internet_urls:
+                raise ValueError("at least one source image is required")
+            job = await service(request).retry_failed_job(
+                job_id,
+                asset_ids,
+                internet_urls,
+                background_tasks=background_tasks,
+            )
     except KeyError:
         raise HTTPException(status_code=404, detail="job not found") from None
     except ValueError as exc:
@@ -696,6 +708,7 @@ async def attach_job_source_images_api(
 @router.post("/jobs/{job_id}/source-images")
 async def attach_job_source_images_page(
     request: Request,
+    background_tasks: BackgroundTasks,
     job_id: str,
     source_image_asset_ids: str = Form(""),
     files: list[UploadFile] = File(default=[]),
@@ -710,12 +723,42 @@ async def attach_job_source_images_page(
         upload = await save_source_images(service(request).storage, files)
         asset_ids.extend(upload["asset_ids"])
     try:
-        await service(request).attach_source_images_to_job(job_id, asset_ids, internet_urls)
+        existing = service(request).get_job(job_id)
+        if existing.result:
+            next_job = await service(request).attach_source_images_to_job(job_id, asset_ids, internet_urls)
+        else:
+            if not asset_ids and not internet_urls:
+                raise ValueError("at least one source image is required")
+            next_job = await service(request).retry_failed_job(
+                job_id,
+                asset_ids,
+                internet_urls,
+                background_tasks=background_tasks,
+            )
     except KeyError:
         raise HTTPException(status_code=404, detail="job not found") from None
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return RedirectResponse(url=url(f"/jobs/{job_id}?photos=attached"), status_code=303)
+    return RedirectResponse(url=url(f"/jobs/{next_job.id}?photos=attached"), status_code=303)
+
+
+@router.post("/jobs/{job_id}/retry")
+async def retry_failed_job_page(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    job_id: str,
+) -> RedirectResponse:
+    try:
+        job = await service(request).retry_failed_job(
+            job_id,
+            allow_without_photos=True,
+            background_tasks=background_tasks,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="job not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RedirectResponse(url=url(f"/jobs/{job.id}?retry=ok"), status_code=303)
 
 
 @router.get("/v1/generation/jobs")

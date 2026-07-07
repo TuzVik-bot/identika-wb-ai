@@ -43,7 +43,24 @@
   </header>
 
   {% if job.error %}
-  <section class="surface-card notice notice--error">{{ job.error }}</section>
+  <section class="surface-card notice notice--error">
+    <p>{{ job.error }}</p>
+    {% if not job.result %}
+    <p class="text-muted">Можно восстановить проект из исходных данных: загрузите фото товара или создайте черновик с заглушками, а фото добавите позже.</p>
+    <form class="job-source-upload" method="post" action="{{ base_path }}/jobs/{{ job.id }}/source-images" enctype="multipart/form-data">
+      <label class="field">Загрузить фото
+        <input type="file" name="files" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple>
+      </label>
+      <label class="field">Ссылка на фото из интернета
+        <textarea name="source_image_urls" rows="2" placeholder="https://example.com/product.jpg"></textarea>
+      </label>
+      <button type="submit" class="button button--accent">Загрузить фото и создать новый проект</button>
+    </form>
+    <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/retry">
+      <button type="submit" class="button button--ghost">Создать черновик без фото</button>
+    </form>
+    {% endif %}
+  </section>
   {% elif upload_status == 'ok' %}
   <section class="surface-card notice notice--success">Пакет успешно отправлен в WB Tool.</section>
   {% elif upload_status == 'staging' %}

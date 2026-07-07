@@ -443,6 +443,31 @@ class JobService:
         self.storage.update_result(job_id, job.result)
         return self.storage.get_job(job_id)
 
+    async def retry_failed_job(
+        self,
+        job_id: str,
+        asset_ids: list[str] | None = None,
+        image_urls: list[str] | None = None,
+        *,
+        allow_without_photos: bool = False,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> JobRecord:
+        job = self.storage.get_job(job_id)
+        if job.result:
+            return await self.attach_source_images_to_job(job_id, asset_ids or [], image_urls or [])
+        if job.status != "failed":
+            raise ValueError("retry is allowed only for failed jobs without result")
+
+        request = CreateJobRequest.model_validate(self.storage.get_job_request_payload(job_id))
+        if asset_ids:
+            attach_source_images(request.product, asset_ids)
+        if image_urls:
+            attach_source_image_urls(request.product, image_urls)
+        request.source_image_asset_ids = []
+        if allow_without_photos:
+            request.allow_generate_without_photos = True
+        return await self.create_job(request, background_tasks=background_tasks)
+
     def reset_slide_text(self, job_id: str, slide_index: int) -> JobRecord:
         job = self.storage.get_job(job_id)
         if not job.result:

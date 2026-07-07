@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from identika.app import create_app
 from identika.config import settings
+from identika.models import CreateJobRequest, ProductContext
 from identika.services.wb_tool import WBToolClient
 
 
@@ -54,6 +55,35 @@ def client(tmp_path, monkeypatch) -> TestClient:
 
 def _job_id_from_location(location: str) -> str:
     return PurePosixPath(location).name
+
+
+def _png_bytes() -> bytes:
+    from io import BytesIO
+
+    from PIL import Image
+
+    buf = BytesIO()
+    Image.new("RGB", (1, 1), "#ffffff").save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _create_failed_photo_job(client: TestClient) -> str:
+    storage = client.app.state.jobs.storage
+    request = CreateJobRequest(
+        product=ProductContext(
+            store_slug="demo-wb",
+            sku_id=6831,
+            nm_id=1233000519,
+            title="Переключатель клавиатуры и мыши на 2 компьютера USB 3.0",
+            subject_name="Электроника",
+        )
+    )
+    job = storage.create_job(request.model_dump(mode="json"))
+    storage.save_error(
+        job.id,
+        "Фото товара не загружены: WB/CDN недоступны. Загрузите фото вручную.",
+    )
+    return job.id
 
 
 def test_redesigned_job_page_elements(client: TestClient) -> None:
@@ -408,3 +438,40 @@ def test_source_photo_url_input_is_limited_and_validated(client: TestClient) -> 
     )
     assert invalid.status_code == 409
     assert "invalid image URL" in invalid.json()["detail"]
+
+
+@pytest.mark.no_photo_inject
+def test_failed_photo_job_page_shows_recovery_actions(client: TestClient) -> None:
+    job_id = _create_failed_photo_job(client)
+
+    page = client.get(f"/jobs/{job_id}")
+    assert page.status_code == 200
+    assert "WB/CDN недоступны" in page.text
+    assert "Загрузить фото и создать новый проект" in page.text
+    assert "Создать черновик без фото" in page.text
+    assert f"/jobs/{job_id}/source-images" in page.text
+    assert f"/jobs/{job_id}/retry" in page.text
+
+
+@pytest.mark.no_photo_inject
+def test_failed_photo_job_upload_creates_recovered_project(client: TestClient) -> None:
+    job_id = _create_failed_photo_job(client)
+
+    recovered = client.post(
+        f"/jobs/{job_id}/source-images",
+        files=[("files", ("photo.png", _png_bytes(), "image/png"))],
+    )
+    assert recovered.status_code == 303
+    new_job_id = _job_id_from_location(recovered.headers["location"].split("?", 1)[0])
+    assert new_job_id != job_id
+
+    result = client.get(f"/v1/generation/jobs/{new_job_id}/result")
+    assert result.status_code == 200
+    payload = result.json()
+    assert len(payload["slides"]) == 10
+    assert payload["product"]["images"][0]["asset_id"]
+
+    page = client.get(recovered.headers["location"])
+    assert page.status_code == 200
+    assert "Фото прикреплены" in page.text
+    assert "Фото подключены" in page.text
