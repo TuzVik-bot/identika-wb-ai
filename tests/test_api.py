@@ -100,8 +100,9 @@ def test_ui_smoke_pages_demo_redirect_edit_approve_export_and_assets(client: Tes
     create_page = client.get("/create?account_id=1&q=товар&brief=Светлый фон")
     assert create_page.status_code == 200
     assert "Ваш товар" in create_page.text
-    assert "Подходит для разных категорий товаров" in create_page.text
-    assert "3 шага" in create_page.text
+    assert "Пульт оператора" in create_page.text
+    assert "WB-карточки за пару кликов" in create_page.text
+    assert "Обновить очередь" in create_page.text
     assert "Тестовый товар WB" in create_page.text
     assert "/wb/generate" in create_page.text
 

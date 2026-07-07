@@ -258,6 +258,35 @@ def dashboard_status_tabs(jobs: list, selected_status: str, query: str) -> list[
     return tabs
 
 
+def wb_product_has_inline_photo(item: dict) -> bool:
+    for key in ("images", "photos", "media"):
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return True
+        if isinstance(value, list):
+            for image in value:
+                if isinstance(image, str) and image.strip():
+                    return True
+                if isinstance(image, dict) and any(
+                    str(image.get(field, "")).strip()
+                    for field in ("url", "src", "photo", "image")
+                ):
+                    return True
+    return False
+
+
+def decorate_wb_product(item: dict, *, account_id: int, account_name: str) -> dict:
+    has_photo = wb_product_has_inline_photo(item)
+    return {
+        **item,
+        "account_id": account_id,
+        "account_name": account_name,
+        "photo_status_label": "Фото есть в WB" if has_photo else "Фото проверим при запуске",
+        "photo_status_tone": "ok" if has_photo else "pending",
+        "generation_ready": bool(item.get("sku_id")),
+    }
+
+
 async def create_context(request: Request) -> dict:
     wb_error = ""
     accounts: list[dict] = []
@@ -280,11 +309,11 @@ async def create_context(request: Request) -> dict:
             )
             result = await wb.products(int(selected_account_id), q=q, limit=100)
             products = [
-                {
-                    **item,
-                    "account_id": int(selected_account_id),
-                    "account_name": account.get("name") or account.get("slug") or "WB",
-                }
+                decorate_wb_product(
+                    item,
+                    account_id=int(selected_account_id),
+                    account_name=account.get("name") or account.get("slug") or "WB",
+                )
                 for item in result.get("items", [])
             ]
         elif accounts:
@@ -299,18 +328,24 @@ async def create_context(request: Request) -> dict:
                     continue
                 account_label = account.get("name") or account.get("slug") or "WB"
                 products.extend(
-                    {
-                        **item,
-                        "account_id": int(account_id),
-                        "account_name": account_label,
-                    }
+                    decorate_wb_product(
+                        item,
+                        account_id=int(account_id),
+                        account_name=account_label,
+                    )
                     for item in result.get("items", [])
                 )
     except (httpx.HTTPError, ValueError) as exc:
         wb_error = f"WB Tool недоступен или вернул ошибку: {type(exc).__name__}"
+    configured_accounts_count = sum(
+        1 for account in accounts if account.get("wb_configured", True)
+    )
     return {
         "accounts": accounts,
         "products": products,
+        "products_count": len(products),
+        "accounts_count": len(accounts),
+        "configured_accounts_count": configured_accounts_count,
         "selected_account_id": selected_account_id,
         "is_all_accounts": bool(accounts and not selected_account_id),
         "q": q,

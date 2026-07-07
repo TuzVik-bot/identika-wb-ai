@@ -43,22 +43,31 @@
   </header>
 
   {% if job.error %}
-  <section class="surface-card notice notice--error">
-    <p>{{ job.error }}</p>
+  <section class="surface-card job-recovery notice notice--error">
+    <div class="job-recovery__head">
+      <span class="status status-failed">Нужно фото</span>
+      <h2>Проект можно восстановить</h2>
+      <p>{{ job.error }}</p>
+    </div>
     {% if not job.result %}
-    <p class="text-muted">Можно восстановить проект из исходных данных: загрузите фото товара или создайте черновик с заглушками, а фото добавите позже.</p>
-    <form class="job-source-upload" method="post" action="{{ base_path }}/jobs/{{ job.id }}/source-images" enctype="multipart/form-data">
-      <label class="field">Загрузить фото
-        <input type="file" name="files" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple>
-      </label>
-      <label class="field">Ссылка на фото из интернета
-        <textarea name="source_image_urls" rows="2" placeholder="https://example.com/product.jpg"></textarea>
-      </label>
-      <button type="submit" class="button button--accent">Загрузить фото и создать новый проект</button>
-    </form>
-    <form method="post" action="{{ base_path }}/jobs/{{ job.id }}/retry">
-      <button type="submit" class="button button--ghost">Создать черновик без фото</button>
-    </form>
+    <div class="job-recovery__grid">
+      <form class="job-source-upload job-recovery__action" method="post" action="{{ base_path }}/jobs/{{ job.id }}/source-images" enctype="multipart/form-data">
+        <h3>Загрузить фото и создать новый проект</h3>
+        <p class="text-muted">Подойдёт файл JPEG/PNG или прямая ссылка на изображение. Новый проект сразу пересоберёт слайды с этим фото.</p>
+        <label class="field">Загрузить фото
+          <input type="file" name="files" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple>
+        </label>
+        <label class="field">Ссылка на фото из интернета
+          <textarea name="source_image_urls" rows="2" placeholder="https://example.com/product.jpg"></textarea>
+        </label>
+        <button type="submit" class="button button--accent">Загрузить и пересобрать</button>
+      </form>
+      <form class="job-recovery__action job-recovery__action--soft" method="post" action="{{ base_path }}/jobs/{{ job.id }}/retry">
+        <h3>Собрать черновик без фото</h3>
+        <p class="text-muted">Это безопасный черновик для текста и структуры. Approve и экспорт останутся закрыты, пока не появятся реальные фото товара.</p>
+        <button type="submit" class="button button--ghost">Создать черновик</button>
+      </form>
+    </div>
     {% endif %}
   </section>
   {% elif upload_status == 'ok' %}

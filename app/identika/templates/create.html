@@ -3,11 +3,44 @@
 {% block title %}Создать проект · Identika{% endblock %}
 
 {% block content %}
-<section class="create-workspace" aria-labelledby="create-title">
+<section class="operator-hero" aria-labelledby="create-title">
+  <div class="operator-hero__copy">
+    <p class="eyebrow">Пульт оператора</p>
+    <h1 id="create-title">WB-карточки за пару кликов</h1>
+    <p class="operator-hero__lede">Выберите товар из WB, при необходимости добавьте фото или пожелания и запустите комплект из 10 слайдов, rich-пакета и PDF-превью.</p>
+  </div>
+  <dl class="operator-metrics" aria-label="Сводка WB">
+    <div>
+      <dt>Товары</dt>
+      <dd>{{ products_count }}</dd>
+    </div>
+    <div>
+      <dt>Магазины</dt>
+      <dd>{{ configured_accounts_count }}/{{ accounts_count }}</dd>
+    </div>
+    <div>
+      <dt>Вывод</dt>
+      <dd>10+rich</dd>
+    </div>
+  </dl>
+</section>
+
+<section class="operator-flow" aria-label="Процесс карточки WB">
+  <span class="operator-flow__item is-active">WB товар</span>
+  <span class="operator-flow__item">10 слайдов</span>
+  <span class="operator-flow__item">Rich и PDF</span>
+  <span class="operator-flow__item">Approve</span>
+  <span class="operator-flow__item">Export WB</span>
+</section>
+
+<section class="create-workspace" aria-label="Создание WB-карточки">
   <aside class="create-sidebar">
     <section class="step-card upload-card">
       <div class="step-card__head">
-        <h1 id="create-title">Ваш товар</h1>
+        <div>
+          <p class="eyebrow">Фото</p>
+          <h2>Ваш товар</h2>
+        </div>
         <span>01</span>
       </div>
       <form id="source-upload-form" class="upload-form" enctype="multipart/form-data">
@@ -20,6 +53,7 @@
         <div id="source-preview" class="source-preview" hidden aria-live="polite"></div>
         <input type="hidden" id="source-image-asset-ids" name="source_image_asset_ids" value="">
         <p id="upload-status" class="text-muted">До 4 фото товара с разных сторон</p>
+        <p class="operator-note">Если WB/CDN не отдаст фото, загруженные здесь файлы сразу уйдут в генерацию.</p>
         <label class="field internet-photo-field" for="source-image-urls-input">Ссылка на фото из интернета
           <textarea id="source-image-urls-input" name="source_image_urls" rows="3" placeholder="https://example.com/product.jpg"></textarea>
           <small class="text-muted">Можно вставить до 4 прямых ссылок на изображения, каждую с новой строки.</small>
@@ -39,16 +73,18 @@
 
     <section class="step-card generation-card">
       <div class="step-card__head">
-        <h2>Настройте генерацию</h2>
+        <div>
+          <p class="eyebrow">Параметры</p>
+          <h2>Настройки WB-карточки</h2>
+        </div>
         <span>02</span>
       </div>
 
-      <div class="segmented" aria-label="Тип контента">
-        <button type="button" class="is-active">Фото</button>
-        <button type="button" disabled>Карточка</button>
-        <button type="button" disabled>Видео</button>
+      <div class="operator-pack" aria-label="Что будет создано">
+        <span>Комплект</span>
+        <strong>10 слайдов + rich/PDF</strong>
+        <small>После проверки проект можно утвердить, скачать ZIP и передать в WB Tool.</small>
       </div>
-      <p class="text-muted">Создавайте комплект WB-медиа из товара и пожеланий к сценарию.</p>
 
       {% if wb_error %}
       <p class="notice notice--error">{{ wb_error }}</p>
@@ -69,7 +105,7 @@
           <input name="q" value="{{ q }}" placeholder="Название, артикул, nmID или категория">
         </label>
         <label class="field field--wide">Пожелания
-          <textarea name="brief" rows="4" maxlength="2000" placeholder="Например: мягкий свет, минимализм, нейтральный фон.">{{ brief }}</textarea>
+          <textarea name="brief" rows="4" maxlength="2000" placeholder="Например: мягкий свет, минимализм, нейтральный фон">{{ brief }}</textarea>
         </label>
         <label class="field">Шаблон
           <select id="category-template-select" name="category_template_id">
@@ -81,7 +117,7 @@
             {% endfor %}
           </select>
         </label>
-        <button type="submit" class="button button--dark">Найти товары</button>
+        <button type="submit" class="button button--dark">Обновить очередь</button>
       </form>
 
       <details class="advanced-settings">
@@ -99,19 +135,38 @@
   </aside>
 
   <section class="results-stage" aria-labelledby="results-title">
-    <div class="results-stage__head">
-      <h2 id="results-title">{% if is_all_accounts %}Товары WB{% else %}Результаты{% endif %}</h2>
+    <div class="results-stage__head results-stage__head--operator">
+      <div>
+        <p class="eyebrow">Очередь WB</p>
+        <h2 id="results-title">{% if is_all_accounts %}Товары WB{% else %}Результаты{% endif %}</h2>
+        <p class="text-muted" id="product-count-label">{{ products_count }} товаров в текущей выдаче</p>
+      </div>
       <span>03</span>
     </div>
 
     {% if products %}
+    <div class="queue-toolbar">
+      <label class="queue-search" for="product-quick-filter">Быстрый фильтр
+        <input id="product-quick-filter" type="search" placeholder="Название, SKU, nmID или магазин" autocomplete="off">
+      </label>
+      <span class="queue-toolbar__status">Генерация доступна сразу из карточки товара</span>
+    </div>
     <div class="product-grid">
       {% for product in products %}
-      <article class="product-card">
+      <article class="product-card product-card--operator" data-product-card>
+        <div class="product-card__marker" aria-hidden="true">WB</div>
         <div class="product-card__body">
-          <span class="status">WB</span>
+          <div class="product-card__topline">
+            <span class="status">{{ product.account_name or "WB" }}</span>
+            <span class="product-badge product-badge--{{ product.photo_status_tone }}">{{ product.photo_status_label }}</span>
+          </div>
           <h3>{{ product.title or product.vendor_code or product.nm_id or product.sku_id }}</h3>
-          <p>{% if product.account_name %}{{ product.account_name }} · {% endif %}SKU {{ product.sku_id }}{% if product.nm_id %} · nmID {{ product.nm_id }}{% endif %}{% if product.subject_name %} · {{ product.subject_name }}{% endif %}</p>
+          <div class="product-card__meta" aria-label="Данные товара">
+            <span>SKU {{ product.sku_id or "—" }}</span>
+            {% if product.nm_id %}<span>nmID {{ product.nm_id }}</span>{% endif %}
+            {% if product.vendor_code %}<span>{{ product.vendor_code }}</span>{% endif %}
+            {% if product.subject_name %}<span>{{ product.subject_name }}</span>{% endif %}
+          </div>
         </div>
         <form method="post" action="{{ base_path }}/wb/generate" class="wb-generate-form" data-submit-loading data-require-photo="1">
           <input type="hidden" name="account_id" value="{{ product.account_id or selected_account_id }}">
@@ -121,89 +176,28 @@
           <input type="hidden" name="source_image_asset_ids" class="source-image-ids-field" value="">
           <input type="hidden" name="source_image_urls" class="source-image-urls-field" value="">
           <input type="hidden" name="allow_generate_without_photos" class="allow-without-photos-field" value="">
-          <button type="submit" class="button wb-generate-btn" title="Сначала попробуем фото из WB, затем интернет-ссылку или загруженные вручную фото">Сгенерировать</button>
-          <p class="text-muted wb-generate-hint">Сначала попробуем фото из WB. Если WB не отдаст изображения, вставьте ссылку на фото, загрузите файл слева или включите режим без фото.</p>
+          <button type="submit" class="button button--accent wb-generate-btn" data-can-generate="{{ '1' if product.generation_ready else '0' }}" title="Сначала попробуем фото из WB, затем интернет-ссылку или загруженные вручную фото" {% if not product.generation_ready %}disabled{% endif %}>Сгенерировать карточку</button>
+          <p class="text-muted wb-generate-hint">WB-фото → ручное фото → черновик без фото, если отмечено слева.</p>
         </form>
       </article>
       {% endfor %}
     </div>
+    <div id="product-filter-empty" class="empty-state empty-state--large" hidden>
+      <strong>В текущей выдаче ничего не найдено.</strong>
+      <p>Очистите быстрый фильтр или обновите очередь через поиск выше.</p>
+    </div>
     {% elif selected_account_id or q %}
     <div class="empty-state empty-state--large">
-      <strong>По этому магазину товары не найдены.</strong>
-      <p>Проверь синхронизацию WB Tool, выбери другой магазин или измени поиск.</p>
+      <strong>По этому запросу товары не найдены.</strong>
+      <p>Проверьте синхронизацию WB Tool, выберите другой магазин или измените поиск.</p>
     </div>
     {% else %}
     <div class="empty-state empty-state--large">
       <strong>WB-товары появятся здесь автоматически.</strong>
-      <p>Если список пустой, проверь подключение WB Tool или запусти демо-проект.</p>
+      <p>Если список пустой, проверьте подключение WB Tool или запустите демо-проект.</p>
     </div>
     {% endif %}
   </section>
-</section>
-
-<section class="examples-section" aria-labelledby="examples-title">
-  <p class="eyebrow">Примеры</p>
-  <h2 id="examples-title">Подходит для разных категорий товаров</h2>
-  <p class="text-muted">Покажите нам товар — и получите чистую, продающую карточку.</p>
-
-  <div class="example-carousel" aria-label="Примеры готовых работ">
-    <article class="example-card example-card--fashion">
-      <div class="example-card__canvas">
-        <strong>Джинсы</strong>
-        <span>100% хлопковый деним</span>
-      </div>
-      <small>Категория товара</small>
-      <b>Одежда</b>
-    </article>
-    <article class="example-card example-card--jewelry">
-      <div class="example-card__canvas">
-        <strong>Серьги</strong>
-        <span>Кристаллы разных оттенков</span>
-      </div>
-      <small>Категория товара</small>
-      <b>Украшения</b>
-    </article>
-    <article class="example-card example-card--sport">
-      <div class="example-card__canvas">
-        <strong>Кроссовки</strong>
-        <span>Амортизация и сетчатый верх</span>
-      </div>
-      <small>Категория товара</small>
-      <b>Обувь</b>
-    </article>
-    <article class="example-card example-card--tea">
-      <div class="example-card__canvas">
-        <strong>Набор чая</strong>
-        <span>Натуральный состав</span>
-      </div>
-      <small>Категория товара</small>
-      <b>Чай и напитки</b>
-    </article>
-  </div>
-
-  <a class="button button--accent examples-cta" href="#create-title">Создать для своего товара →</a>
-</section>
-
-<section class="steps-section" aria-labelledby="steps-title">
-  <p class="eyebrow">Как это происходит</p>
-  <h2 id="steps-title">3 шага — и готово</h2>
-  <div class="process-grid">
-    <article class="process-step">
-      <div class="process-step__head"><span>01</span><h3>Загрузите фото товара</h3></div>
-      <p>Подойдёт обычная фотография со смартфона или товар из WB Tool.</p>
-      <div class="process-shot process-shot--source"><span>Исходник</span></div>
-    </article>
-    <article class="process-step">
-      <div class="process-step__head"><span>02</span><h3>Выберите концепцию</h3></div>
-      <p>Студия, интерьер, композиция и другие сценарии фиксируются в пожеланиях.</p>
-      <div class="process-shot process-shot--concept"><span>Для каталога</span></div>
-    </article>
-    <article class="process-step">
-      <div class="process-step__head"><span>03</span><h3>Добавьте инфографику</h3></div>
-      <p>Тексты, преимущества и характеристики превращаются в готовые слайды.</p>
-      <div class="process-shot process-shot--result"><span>Готовая карточка</span></div>
-    </article>
-  </div>
 </section>
 
 <script>
@@ -221,18 +215,25 @@ document.addEventListener('DOMContentLoaded', () => {
   const templateSelect = document.getElementById('category-template-select');
   const templateFields = document.querySelectorAll('.category-template-id-field');
   const generateButtons = document.querySelectorAll('.wb-generate-btn');
+  const quickFilter = document.getElementById('product-quick-filter');
+  const productCards = document.querySelectorAll('[data-product-card]');
+  const productCountLabel = document.getElementById('product-count-label');
+  const productFilterEmpty = document.getElementById('product-filter-empty');
   const basePath = {{ base_path|tojson }};
 
   function syncGenerateButtons() {
     const hasUpload = Boolean(idsField.value.trim());
     const allowWithout = Boolean(allowCheckbox?.checked);
     generateButtons.forEach((button) => {
-      button.disabled = false;
+      const canGenerate = button.dataset.canGenerate !== '0';
+      button.disabled = !canGenerate;
+      if (!canGenerate) return;
       button.title = hasUpload
         ? 'Будут использованы загруженные вручную фото'
         : allowWithout
           ? 'Генерация запустится без исходных фото товара'
           : 'Сначала попробуем фото из WB; если их нет, используйте ссылку или загрузите файл';
+      button.textContent = allowWithout ? 'Собрать черновик' : 'Сгенерировать карточку';
     });
     allowFields.forEach((field) => {
       field.value = allowWithout ? '1' : '';
@@ -254,6 +255,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
   templateSelect?.addEventListener('change', syncTemplateFields);
   syncTemplateFields();
+
+  function applyQuickFilter() {
+    const query = (quickFilter?.value || '').trim().toLowerCase();
+    let visible = 0;
+    productCards.forEach((card) => {
+      const matches = !query || card.textContent.toLowerCase().includes(query);
+      card.hidden = !matches;
+      if (matches) visible += 1;
+    });
+    if (productCountLabel) {
+      productCountLabel.textContent = `${visible} из ${productCards.length} товаров в текущей выдаче`;
+    }
+    if (productFilterEmpty) {
+      productFilterEmpty.hidden = visible !== 0;
+    }
+  }
+
+  quickFilter?.addEventListener('input', applyQuickFilter);
 
   document.querySelectorAll('[data-submit-loading]').forEach((form) => {
     form.addEventListener('submit', () => {

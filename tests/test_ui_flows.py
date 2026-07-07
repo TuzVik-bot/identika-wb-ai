@@ -223,12 +223,15 @@ def test_create_page_keeps_selected_category_template(client: TestClient) -> Non
 def test_create_page_shows_wb_products_without_manual_account_selection(client: TestClient) -> None:
     page = client.get("/create")
     assert page.status_code == 200
+    assert "Пульт оператора" in page.text
     assert "Все магазины" in page.text
     assert "Товары WB" in page.text
     assert "Тестовый товар WB" in page.text
     assert 'name="account_id" value="1"' in page.text
     assert "wb-generate-btn" in page.text
-    assert "Найти товары" in page.text
+    assert "Обновить очередь" in page.text
+    assert "Быстрый фильтр" in page.text
+    assert "Фото проверим при запуске" in page.text
 
 
 def test_create_page_allows_wb_generation_before_manual_upload(client: TestClient) -> None:
@@ -237,6 +240,7 @@ def test_create_page_allows_wb_generation_before_manual_upload(client: TestClien
     assert "wb-generate-btn" in page.text
     assert 'button type="submit" class="button wb-generate-btn" disabled' not in page.text
     assert "Сначала попробуем фото из WB" in page.text
+    assert "Сгенерировать карточку" in page.text
     assert "source-image-urls-input" in page.text
     assert 'name="source_image_urls" class="source-image-urls-field"' in page.text
 
@@ -458,8 +462,10 @@ def test_failed_photo_job_page_shows_recovery_actions(client: TestClient) -> Non
     page = client.get(f"/jobs/{job_id}")
     assert page.status_code == 200
     assert "WB/CDN недоступны" in page.text
+    assert "Проект можно восстановить" in page.text
+    assert "job-recovery__grid" in page.text
     assert "Загрузить фото и создать новый проект" in page.text
-    assert "Создать черновик без фото" in page.text
+    assert "Собрать черновик без фото" in page.text
     assert f"/jobs/{job_id}/source-images" in page.text
     assert f"/jobs/{job_id}/retry" in page.text
 
