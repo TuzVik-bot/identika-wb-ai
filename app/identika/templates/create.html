@@ -56,8 +56,8 @@
 
       <form class="filter-bar" method="get" action="{{ base_path }}/create">
         <label class="field">Магазин
-          <select name="account_id" required>
-            <option value="">Выбрать магазин</option>
+          <select name="account_id">
+            <option value="">Все магазины</option>
             {% for account in accounts %}
             <option value="{{ account.id }}" {% if selected_account_id and account.id|string == selected_account_id %}selected{% endif %}>
               {{ account.name }} · {{ account.slug }}{% if not account.wb_configured %} · WB не настроен{% endif %}
@@ -66,7 +66,7 @@
           </select>
         </label>
         <label class="field">Как показать товар?
-          <input name="q" value="{{ q }}" placeholder="Название, артикул или категория">
+          <input name="q" value="{{ q }}" placeholder="Название, артикул, nmID или категория">
         </label>
         <label class="field field--wide">Пожелания
           <textarea name="brief" rows="4" maxlength="2000" placeholder="Например: мягкий свет, минимализм, нейтральный фон.">{{ brief }}</textarea>
@@ -81,7 +81,7 @@
             {% endfor %}
           </select>
         </label>
-        <button type="submit" class="button button--dark">Получить товары с WB</button>
+        <button type="submit" class="button button--dark">Найти товары</button>
       </form>
 
       <details class="advanced-settings">
@@ -100,21 +100,21 @@
 
   <section class="results-stage" aria-labelledby="results-title">
     <div class="results-stage__head">
-      <h2 id="results-title">Результаты</h2>
+      <h2 id="results-title">{% if is_all_accounts %}Товары WB{% else %}Результаты{% endif %}</h2>
       <span>03</span>
     </div>
 
-    {% if selected_account_id and products %}
+    {% if products %}
     <div class="product-grid">
       {% for product in products %}
       <article class="product-card">
         <div class="product-card__body">
           <span class="status">WB</span>
           <h3>{{ product.title or product.vendor_code or product.nm_id or product.sku_id }}</h3>
-          <p>SKU {{ product.sku_id }}{% if product.nm_id %} · nmID {{ product.nm_id }}{% endif %}{% if product.subject_name %} · {{ product.subject_name }}{% endif %}</p>
+          <p>{% if product.account_name %}{{ product.account_name }} · {% endif %}SKU {{ product.sku_id }}{% if product.nm_id %} · nmID {{ product.nm_id }}{% endif %}{% if product.subject_name %} · {{ product.subject_name }}{% endif %}</p>
         </div>
         <form method="post" action="{{ base_path }}/wb/generate" class="wb-generate-form" data-submit-loading data-require-photo="1">
-          <input type="hidden" name="account_id" value="{{ selected_account_id }}">
+          <input type="hidden" name="account_id" value="{{ product.account_id or selected_account_id }}">
           <input type="hidden" name="sku_id" value="{{ product.sku_id }}">
           <input type="hidden" name="brief" value="{{ brief }}">
           <input type="hidden" name="category_template_id" class="category-template-id-field" value="{{ category_template_id }}">
@@ -127,15 +127,15 @@
       </article>
       {% endfor %}
     </div>
-    {% elif selected_account_id %}
+    {% elif selected_account_id or q %}
     <div class="empty-state empty-state--large">
       <strong>По этому магазину товары не найдены.</strong>
-      <p>Проверь синхронизацию WB Tool или измени поиск.</p>
+      <p>Проверь синхронизацию WB Tool, выбери другой магазин или измени поиск.</p>
     </div>
     {% else %}
     <div class="empty-state empty-state--large">
-      <strong>Здесь появятся результаты после генерации.</strong>
-      <p>Выбери магазин, найди товар или запусти демо-проект.</p>
+      <strong>WB-товары появятся здесь автоматически.</strong>
+      <p>Если список пустой, проверь подключение WB Tool или запусти демо-проект.</p>
     </div>
     {% endif %}
   </section>

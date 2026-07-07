@@ -220,6 +220,17 @@ def test_create_page_keeps_selected_category_template(client: TestClient) -> Non
     assert "/wb/generate" in page.text
 
 
+def test_create_page_shows_wb_products_without_manual_account_selection(client: TestClient) -> None:
+    page = client.get("/create")
+    assert page.status_code == 200
+    assert "Все магазины" in page.text
+    assert "Товары WB" in page.text
+    assert "Тестовый товар WB" in page.text
+    assert 'name="account_id" value="1"' in page.text
+    assert "wb-generate-btn" in page.text
+    assert "Найти товары" in page.text
+
+
 def test_create_page_allows_wb_generation_before_manual_upload(client: TestClient) -> None:
     page = client.get("/create?account_id=1&q=товар")
     assert page.status_code == 200

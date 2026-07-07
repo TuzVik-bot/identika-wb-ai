@@ -270,14 +270,49 @@ async def create_context(request: Request) -> dict:
         wb = WBToolClient()
         accounts = await wb.accounts()
         if selected_account_id:
+            account = next(
+                (
+                    item
+                    for item in accounts
+                    if str(item.get("id", "")) == selected_account_id
+                ),
+                {},
+            )
             result = await wb.products(int(selected_account_id), q=q, limit=100)
-            products = result.get("items", [])
+            products = [
+                {
+                    **item,
+                    "account_id": int(selected_account_id),
+                    "account_name": account.get("name") or account.get("slug") or "WB",
+                }
+                for item in result.get("items", [])
+            ]
+        elif accounts:
+            per_account_limit = 50 if q.strip() else 12
+            for account in accounts:
+                account_id = account.get("id")
+                if account_id is None:
+                    continue
+                try:
+                    result = await wb.products(int(account_id), q=q, limit=per_account_limit)
+                except (httpx.HTTPError, ValueError):
+                    continue
+                account_label = account.get("name") or account.get("slug") or "WB"
+                products.extend(
+                    {
+                        **item,
+                        "account_id": int(account_id),
+                        "account_name": account_label,
+                    }
+                    for item in result.get("items", [])
+                )
     except (httpx.HTTPError, ValueError) as exc:
         wb_error = f"WB Tool недоступен или вернул ошибку: {type(exc).__name__}"
     return {
         "accounts": accounts,
         "products": products,
         "selected_account_id": selected_account_id,
+        "is_all_accounts": bool(accounts and not selected_account_id),
         "q": q,
         "brief": brief,
         "category_template_id": selected_template_id,
