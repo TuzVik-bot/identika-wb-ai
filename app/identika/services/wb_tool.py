@@ -199,8 +199,11 @@ def merge_context_images(product: ProductContext, context: dict[str, Any]) -> Pr
 
 
 class WBToolClient:
-    def __init__(self, base_url: str | None = None) -> None:
+    def __init__(self, base_url: str | None = None, wb_content_token: str | None = None) -> None:
         self.base_url = (base_url or settings.wb_tool_base_url).rstrip("/")
+        self.wb_content_token = (
+            wb_content_token if wb_content_token is not None else settings.wb_content_api_token
+        ).strip()
 
     async def accounts(self) -> list[dict[str, Any]]:
         async with httpx.AsyncClient(timeout=20.0, trust_env=False) as client:
@@ -262,11 +265,11 @@ class WBToolClient:
 
     async def _wb_content_photo_urls(self, nm_id: int | None) -> list[str]:
         """Official WB Content API photos (enabled only when a token is configured)."""
-        if not settings.wb_content_api_token.strip() or not nm_id or nm_id <= 0:
+        if not self.wb_content_token or not nm_id or nm_id <= 0:
             return []
         from identika.services.wb_content import WBContentClient
 
-        return await WBContentClient().product_photo_urls(nm_id)
+        return await WBContentClient(token=self.wb_content_token).product_photo_urls(nm_id)
 
     async def resolve_product_images(
         self,

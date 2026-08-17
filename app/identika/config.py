@@ -122,6 +122,7 @@ class EffectiveSettings:
         openrouter_api_key = pick_str("openrouter_api_key", settings.openrouter_api_key)
         openrouter_text_model = pick_str("openrouter_text_model", settings.openrouter_text_model)
         openrouter_image_model = pick_str("openrouter_image_model", settings.openrouter_image_model)
+        wb_content_api_token = pick_str("wb_content_api_token", settings.wb_content_api_token)
 
         if "enable_ai_images" in db:
             enable_ai_images = _parse_bool(db["enable_ai_images"])
@@ -138,7 +139,7 @@ class EffectiveSettings:
             enable_ai_images=enable_ai_images,
             openrouter_text_max_tokens=max(256, settings.openrouter_text_max_tokens),
             openrouter_image_max_tokens=max(256, settings.openrouter_image_max_tokens),
-            wb_content_api_token=settings.wb_content_api_token.strip(),
+            wb_content_api_token=wb_content_api_token.strip(),
             wb_content_base_url=settings.wb_content_base_url.strip() or "https://content-api.wildberries.ru",
         )
 

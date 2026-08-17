@@ -63,6 +63,15 @@
     </div>
 
     <div class="settings-section">
+      <h2>WB Content API</h2>
+      <label class="field">
+        WB Content API токен
+        <input type="password" name="wb_content_api_token" value="{{ wb_content_token_masked }}" autocomplete="off" placeholder="eyJhbGciOi...">
+        <small class="text-muted">Токен продавца Wildberries с категорией «Контент» (только чтение). Нужен для загрузки фото товара напрямую из карточки WB.</small>
+      </label>
+    </div>
+
+    <div class="settings-section">
       <h2>Картинки</h2>
       <label class="field field--checkbox">
         <input type="checkbox" name="enable_ai_images" {% if enable_ai_images %}checked{% endif %}>

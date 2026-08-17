@@ -431,6 +431,7 @@ async def settings_page(request: Request) -> HTMLResponse:
                 "openrouter_text_model": eff.openrouter_text_model,
                 "openrouter_image_model": eff.openrouter_image_model,
                 "enable_ai_images": eff.enable_ai_images,
+                "wb_content_token_masked": mask_api_key(eff.wb_content_api_token),
                 "saved": saved,
                 "test_status": test_status,
                 "test_error": test_error,
@@ -461,6 +462,11 @@ async def save_settings(request: Request) -> RedirectResponse:
         values["openrouter_api_key"] = api_key_input
     elif current.openrouter_api_key:
         values["openrouter_api_key"] = current.openrouter_api_key
+    wb_token_input = str(form.get("wb_content_api_token") or "").strip()
+    if wb_token_input and not wb_token_input.startswith("••••"):
+        values["wb_content_api_token"] = wb_token_input
+    elif current.wb_content_api_token:
+        values["wb_content_api_token"] = current.wb_content_api_token
     storage.set_settings(values)
     return RedirectResponse(url=url("/settings?saved=ok"), status_code=303)
 
@@ -666,7 +672,8 @@ async def generate_from_wb(
     except ValueError as exc:
         return photo_error_redirect(account_id, brief, category_template_id, str(exc))
     try:
-        wb = WBToolClient()
+        eff = EffectiveSettings.resolve(service(request).storage)
+        wb = WBToolClient(wb_content_token=eff.wb_content_api_token)
         product, _image_notes = await wb.resolve_product_images(
             sku_id,
             account_id,

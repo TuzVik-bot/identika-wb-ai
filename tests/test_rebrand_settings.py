@@ -91,6 +91,72 @@ def test_settings_get_post_and_db_over_env(client: TestClient, tmp_path) -> None
     assert eff.provider == "openrouter"
 
 
+def test_settings_saves_wb_content_token_and_masks_it(client: TestClient, tmp_path) -> None:
+    save = client.post(
+        "/settings",
+        data={
+            "provider": "mock",
+            "openrouter_api_key": "",
+            "openrouter_text_model": "test/text-model",
+            "openrouter_image_model": "test/image-model",
+            "wb_content_api_token": "wb-secret-token-1234",
+        },
+    )
+    assert save.status_code == 303
+
+    storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
+    eff = EffectiveSettings.resolve(storage)
+    assert eff.wb_content_api_token == "wb-secret-token-1234"
+
+    page = client.get("/settings")
+    assert page.status_code == 200
+    assert "wb-secret-token-1234" not in page.text
+    assert "••••1234" in page.text
+
+
+def test_settings_preserves_masked_wb_content_token(client: TestClient, tmp_path) -> None:
+    client.post(
+        "/settings",
+        data={
+            "provider": "mock",
+            "openrouter_api_key": "",
+            "openrouter_text_model": "test/text-model",
+            "openrouter_image_model": "test/image-model",
+            "wb_content_api_token": "wb-initial-token-9999",
+        },
+    )
+    save = client.post(
+        "/settings",
+        data={
+            "provider": "mock",
+            "openrouter_api_key": "",
+            "openrouter_text_model": "test/text-model",
+            "openrouter_image_model": "test/image-model",
+            "wb_content_api_token": "••••9999",
+        },
+    )
+    assert save.status_code == 303
+    storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
+    eff = EffectiveSettings.resolve(storage)
+    assert eff.wb_content_api_token == "wb-initial-token-9999"
+
+
+def test_wb_content_token_db_overrides_env_and_env_is_fallback(client: TestClient, tmp_path) -> None:
+    storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
+    settings.wb_content_api_token = "env-token"
+    try:
+        # No DB value yet: env value is used as fallback.
+        eff = EffectiveSettings.resolve(storage)
+        assert eff.wb_content_api_token == "env-token"
+
+        # DB value overrides env once saved.
+        storage.set_settings({"wb_content_api_token": "db-token"})
+        eff = EffectiveSettings.resolve(storage)
+        assert eff.wb_content_api_token == "db-token"
+    finally:
+        settings.wb_content_api_token = ""
+
+
 def test_dynamic_routes_send_no_store_cache_control(client: TestClient) -> None:
     demo = client.post("/demo")
     job_id = demo.headers["location"].split("/")[-1]
