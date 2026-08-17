@@ -260,13 +260,21 @@ class WBToolClient:
                     return urls
         return []
 
+    async def _wb_content_photo_urls(self, nm_id: int | None) -> list[str]:
+        """Official WB Content API photos (enabled only when a token is configured)."""
+        if not settings.wb_content_api_token.strip() or not nm_id or nm_id <= 0:
+            return []
+        from identika.services.wb_content import WBContentClient
+
+        return await WBContentClient().product_photo_urls(nm_id)
+
     async def resolve_product_images(
         self,
         sku_id: int,
         account_id: int | None,
         product: ProductContext,
     ) -> tuple[ProductContext, list[str]]:
-        """Merge images from context, optional WB Tool media APIs, then CDN fallback."""
+        """Merge images from context, WB Tool media APIs, WB Content API, then CDN fallback."""
         notes: list[str] = []
         context = await self.product_context(sku_id, account_id)
         product = ProductContext.model_validate({**product.model_dump(), **context})
@@ -282,6 +290,15 @@ class WBToolClient:
                     for index, url in enumerate(media_urls, start=1)
                 ]
                 notes.append(f"Фото получены из WB Tool ({len(media_urls)} шт.).")
+                return product, notes
+
+            content_urls = await self._wb_content_photo_urls(product.nm_id)
+            if content_urls:
+                product.images = [
+                    ProductImage(url=url, role="source", alt=f"WB Content API {index}")
+                    for index, url in enumerate(content_urls, start=1)
+                ]
+                notes.append(f"Фото получены из WB Content API ({len(content_urls)} шт.).")
             elif product.nm_id and product.nm_id > 0:
                 from identika.services.wb_cdn import wb_product_image_urls
 

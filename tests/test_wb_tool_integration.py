@@ -127,6 +127,61 @@ def test_resolve_product_images_uses_media_endpoint(monkeypatch) -> None:
     assert "WB Tool" in notes[0]
 
 
+def test_resolve_product_images_uses_wb_content_api(monkeypatch) -> None:
+    async def fake_context(self, sku_id: int, account_id: int | None = None) -> dict:
+        return {"sku_id": sku_id, "nm_id": 4242, "title": "Товар", "images": []}
+
+    async def fake_media(self, sku_id: int, account_id: int | None = None) -> list[str]:
+        return []
+
+    async def fake_content(self, nm_id: int) -> list[str]:
+        assert nm_id == 4242
+        return ["https://content.example/1.jpg", "https://content.example/2.jpg"]
+
+    monkeypatch.setattr(settings, "wb_content_api_token", "content-token")
+    monkeypatch.setattr(WBToolClient, "product_context", fake_context)
+    monkeypatch.setattr(WBToolClient, "product_media_urls", fake_media)
+    monkeypatch.setattr(
+        "identika.services.wb_content.WBContentClient.product_photo_urls",
+        fake_content,
+    )
+
+    product, notes = asyncio.run(
+        WBToolClient("http://wb.test").resolve_product_images(1, 1, ProductContext())
+    )
+    assert [img.url for img in product.images] == [
+        "https://content.example/1.jpg",
+        "https://content.example/2.jpg",
+    ]
+    assert "WB Content API" in notes[0]
+
+
+def test_resolve_product_images_without_content_token_uses_cdn(monkeypatch) -> None:
+    async def fake_context(self, sku_id: int, account_id: int | None = None) -> dict:
+        return {"sku_id": sku_id, "nm_id": 4242, "title": "Товар", "images": []}
+
+    async def fake_media(self, sku_id: int, account_id: int | None = None) -> list[str]:
+        return []
+
+    async def fail_content(self, nm_id: int) -> list[str]:
+        raise AssertionError("WB Content API must not be called without a token")
+
+    monkeypatch.setattr(settings, "wb_content_api_token", "")
+    monkeypatch.setattr(WBToolClient, "product_context", fake_context)
+    monkeypatch.setattr(WBToolClient, "product_media_urls", fake_media)
+    monkeypatch.setattr(
+        "identika.services.wb_content.WBContentClient.product_photo_urls",
+        fail_content,
+    )
+
+    product, notes = asyncio.run(
+        WBToolClient("http://wb.test").resolve_product_images(1, 1, ProductContext())
+    )
+    assert product.images
+    assert all(img.alt.startswith("WB CDN") for img in product.images)
+    assert "CDN Wildberries" in notes[0]
+
+
 def test_upload_job_handles_501_as_staging(tmp_path, monkeypatch) -> None:
     from identika.models import CreateJobRequest
     from identika.services.jobs import JobService

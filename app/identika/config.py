@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     openrouter_text_model: str = "google/gemini-3.1-flash-lite-preview"
     identika_enable_ai_images: bool | None = None
 
+    wb_content_base_url: str = "https://content-api.wildberries.ru"
+    wb_content_api_token: str = ""
+
     identika_api_key: str = ""
     identika_ui_password: str = ""
 
@@ -93,6 +96,8 @@ class EffectiveSettings:
     openrouter_text_model: str
     openrouter_image_model: str
     enable_ai_images: bool
+    wb_content_api_token: str = ""
+    wb_content_base_url: str = "https://content-api.wildberries.ru"
 
     @property
     def effective_provider(self) -> str:
@@ -127,6 +132,8 @@ class EffectiveSettings:
             openrouter_text_model=openrouter_text_model,
             openrouter_image_model=openrouter_image_model,
             enable_ai_images=enable_ai_images,
+            wb_content_api_token=settings.wb_content_api_token.strip(),
+            wb_content_base_url=settings.wb_content_base_url.strip() or "https://content-api.wildberries.ru",
         )
 
 
