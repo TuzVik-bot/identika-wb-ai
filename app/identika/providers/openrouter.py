@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, ValidationError
 from identika.config import EffectiveSettings, settings
 from identika.models import CreateJobRequest, GenerationResult
 from identika.providers.base import AiProvider
+from identika.providers.errors import describe_openrouter_error
 from identika.providers.mock import MockProvider
 from identika.providers.prompts import (
     OPENROUTER_TEXT_SYSTEM_PROMPT,
@@ -70,7 +71,9 @@ class OpenRouterProvider(AiProvider):
                     "Текст сгенерирован OpenRouter; изображения собираются программным renderer."
                 )
         except Exception as exc:
-            result.warnings.append(f"OpenRouter text fallback to mock: {type(exc).__name__}")
+            result.warnings.append(
+                f"OpenRouter text fallback to mock: {describe_openrouter_error(exc)}"
+            )
         if eff.enable_ai_images:
             result.info.append(f"Image model: {eff.openrouter_image_model}")
         return result
@@ -79,6 +82,7 @@ class OpenRouterProvider(AiProvider):
         payload = {
             "model": eff.openrouter_text_model,
             "temperature": 0.4,
+            "max_tokens": eff.openrouter_text_max_tokens,
             "response_format": {"type": "json_object"},
             "messages": [
                 {

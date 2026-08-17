@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import io
-import json
 import re
 
 import httpx
@@ -10,6 +9,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 from identika.config import EffectiveSettings
 from identika.models import CreateJobRequest, GenerationResult
+from identika.providers.errors import describe_openrouter_error
 from identika.providers.prompts import build_image_model_user_prompt, should_skip_ai_image
 from identika.storage import Storage
 
@@ -60,7 +60,8 @@ async def generate_slide_images(
         except Exception as exc:
             failures += 1
             result.warnings.append(
-                f"Slide {slide.index}: AI image fallback to programmatic SVG ({type(exc).__name__})"
+                f"Slide {slide.index}: AI image fallback to programmatic SVG "
+                f"({describe_openrouter_error(exc)})"
             )
     if attempted == 0 and skipped:
         result.info.append(
@@ -108,6 +109,7 @@ async def _call_image_model(
         "model": eff.openrouter_image_model,
         "messages": [{"role": "user", "content": content}],
         "modalities": ["image", "text"],
+        "max_tokens": eff.openrouter_image_max_tokens,
     }
     async with httpx.AsyncClient(timeout=120.0, trust_env=False) as client:
         response = await client.post(

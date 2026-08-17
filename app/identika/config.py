@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     openrouter_image_model: str = "google/gemini-3.1-flash-image-preview"
     openrouter_text_model: str = "google/gemini-3.1-flash-lite-preview"
+    openrouter_text_max_tokens: int = 4000
+    openrouter_image_max_tokens: int = 2000
     identika_enable_ai_images: bool | None = None
 
     wb_content_base_url: str = "https://content-api.wildberries.ru"
@@ -96,6 +98,8 @@ class EffectiveSettings:
     openrouter_text_model: str
     openrouter_image_model: str
     enable_ai_images: bool
+    openrouter_text_max_tokens: int = 4000
+    openrouter_image_max_tokens: int = 2000
     wb_content_api_token: str = ""
     wb_content_base_url: str = "https://content-api.wildberries.ru"
 
@@ -132,6 +136,8 @@ class EffectiveSettings:
             openrouter_text_model=openrouter_text_model,
             openrouter_image_model=openrouter_image_model,
             enable_ai_images=enable_ai_images,
+            openrouter_text_max_tokens=max(256, settings.openrouter_text_max_tokens),
+            openrouter_image_max_tokens=max(256, settings.openrouter_image_max_tokens),
             wb_content_api_token=settings.wb_content_api_token.strip(),
             wb_content_base_url=settings.wb_content_base_url.strip() or "https://content-api.wildberries.ru",
         )

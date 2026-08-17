@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 import pytest
 from PIL import Image
 
-from identika.config import settings
+from identika.config import EffectiveSettings, settings
 from identika.models import CreateJobRequest, ProductContext, ProductImage
 from identika.providers.image_gen import generate_slide_images
 from identika.providers.openrouter import OpenRouterProvider, get_provider
@@ -68,6 +68,7 @@ def _text_plan() -> dict[str, Any]:
 class FakeAsyncClient:
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self.response_json: dict[str, Any] = {}
+        self.payloads: list[dict[str, Any]] = []
 
     async def __aenter__(self) -> FakeAsyncClient:
         return self
@@ -76,6 +77,7 @@ class FakeAsyncClient:
         return None
 
     async def post(self, url: str, **kwargs: Any) -> AsyncMock:
+        self.payloads.append(kwargs.get("json") or {})
         response = AsyncMock()
         response.raise_for_status = lambda: None
         response.json = lambda: self.response_json
@@ -294,3 +296,53 @@ def test_openrouter_image_generation_skips_white_and_description_with_sources(
     assert not updated.slides[1].background_asset_id
     assert not updated.slides[5].background_asset_id
     assert "NO text" in calls[0]
+
+
+def test_openrouter_text_payload_sends_max_tokens(monkeypatch) -> None:
+    settings.identika_provider = "openrouter"
+    settings.openrouter_api_key = "test-key"
+    settings.identika_enable_ai_images = False
+
+    fake_client = FakeAsyncClient()
+    fake_client.response_json = {
+        "choices": [{"message": {"content": json.dumps(_text_plan(), ensure_ascii=False)}}]
+    }
+    monkeypatch.setattr("identika.providers.openrouter.httpx.AsyncClient", lambda *a, **k: fake_client)
+
+    asyncio.run(OpenRouterProvider().generate(CreateJobRequest(product=ProductContext(title="Тест"))))
+
+    assert fake_client.payloads
+    assert fake_client.payloads[0]["max_tokens"] == EffectiveSettings.resolve().openrouter_text_max_tokens
+
+
+def test_openrouter_image_payload_sends_max_tokens(tmp_path, monkeypatch) -> None:
+    settings.identika_provider = "openrouter"
+    settings.openrouter_api_key = "test-key"
+    settings.identika_enable_ai_images = True
+
+    storage = Storage(db_path=tmp_path / "identika.sqlite", assets_dir=tmp_path / "assets")
+    job = storage.create_job(CreateJobRequest(product=ProductContext(title="Тест")).model_dump(mode="json"))
+    source_id = storage.add_asset(job.id, "source.png", _png_bytes(), "image/png")
+    product = ProductContext(title="Тест", images=[ProductImage(asset_id=source_id, role="source")])
+
+    fake_client = FakeAsyncClient()
+    fake_client.response_json = {
+        "choices": [
+            {
+                "message": {
+                    "content": "",
+                    "images": [{"image_url": {"url": _png_data_uri()}}],
+                }
+            }
+        ]
+    }
+    monkeypatch.setattr("identika.providers.image_gen.httpx.AsyncClient", lambda *a, **k: fake_client)
+
+    request = CreateJobRequest(product=product)
+    base_result = asyncio.run(MockProvider().generate(request))
+    base_result.product = product
+    asyncio.run(generate_slide_images(job.id, request, base_result, storage))
+
+    assert fake_client.payloads
+    eff = EffectiveSettings.resolve(storage)
+    assert fake_client.payloads[0]["max_tokens"] == eff.openrouter_image_max_tokens
