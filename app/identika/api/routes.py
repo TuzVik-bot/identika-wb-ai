@@ -9,7 +9,14 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 
 from identika import __version__
 from identika.config import EffectiveSettings, mask_api_key, settings
-from identika.models import CreateJobRequest, ProductContext, ResultTextPatch, SlideTextUpdate
+from identika.models import (
+    BatchCreateJobsRequest,
+    CreateJobRequest,
+    ProductContext,
+    ProductImage,
+    ResultTextPatch,
+    SlideTextUpdate,
+)
 from identika.services.category_templates import (
     delete_category_template,
     get_category_template,
@@ -28,6 +35,7 @@ from identika.services.product_images import (
     validate_can_start_generation,
 )
 from identika.services.uploads import save_source_images
+from identika.services.wb_content import WBContentClient, photo_urls_from_card
 from identika.services.wb_tool import WBToolClient, upload_redirect_query
 from identika.ui_labels import job_status_label
 
@@ -562,6 +570,7 @@ async def job_page(request: Request, job_id: str) -> HTMLResponse:
     upload_status = request.query_params.get("upload", "")
     upload_detail = request.query_params.get("upload_detail", "")
     upload_status_code = request.query_params.get("upload_status_code", "")
+    upload_via = request.query_params.get("upload_via", "")
     photo_status = source_photo_status(job.result.product) if job.result else None
     missing_source_photos = bool(photo_status and photo_status["needs_action"])
     readiness = result_readiness(job.result) if job.result else None
@@ -588,6 +597,7 @@ async def job_page(request: Request, job_id: str) -> HTMLResponse:
                 "upload_status": upload_status,
                 "upload_detail": upload_detail,
                 "upload_status_code": upload_status_code,
+                "upload_via": upload_via,
                 "missing_source_photos": missing_source_photos,
                 "source_photo_status": photo_status,
                 "readiness": readiness,
@@ -665,6 +675,7 @@ async def generate_from_wb(
     source_image_asset_ids: str = Form(""),
     source_image_urls: str = Form(""),
     allow_generate_without_photos: str = Form(""),
+    auto_approve: str = Form(""),
     category_template_id: str = Form(""),
 ) -> RedirectResponse:
     try:
@@ -685,6 +696,7 @@ async def generate_from_wb(
     attach_source_images(product, uploaded_ids)
     attach_source_image_urls(product, internet_urls)
     allow_without = allow_generate_without_photos in {"1", "true", "on", "yes"}
+    should_auto_approve = auto_approve in {"1", "true", "on", "yes"}
     try:
         validate_can_start_generation(product, allow_without_photos=allow_without)
     except SourcePhotosRequiredError as exc:
@@ -698,12 +710,97 @@ async def generate_from_wb(
                 outputs=["wb_10_slides", "rich_package"],
                 source_image_asset_ids=uploaded_ids,
                 allow_generate_without_photos=allow_without,
+                auto_approve=should_auto_approve,
                 category_template_id=category_template_id.strip() or None,
             ),
             background_tasks=background_tasks,
         )
     except SourcePhotosRequiredError as exc:
         return photo_error_redirect(account_id, brief, category_template_id, str(exc))
+    return RedirectResponse(url=url(f"/jobs/{job.id}"), status_code=303)
+
+
+def _product_from_wb_card(nm_id: int, card: dict | None) -> ProductContext:
+    """Build ProductContext from a WB Content API card (or minimal fallback by nmID)."""
+    if not card:
+        return ProductContext(
+            nm_id=nm_id,
+            title=f"Товар WB {nm_id}",
+        )
+    characteristics: dict[str, str] = {}
+    for item in card.get("characteristics") or []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        params = [str(p) for p in (item.get("params") or []) if str(p).strip()]
+        if name and params:
+            characteristics[name] = ", ".join(params)
+    return ProductContext(
+        nm_id=nm_id,
+        vendor_code=str(card.get("vendorCode")) if card.get("vendorCode") else None,
+        title=str(card.get("title") or f"Товар WB {nm_id}")[:200],
+        brand=str(card.get("brand")) if card.get("brand") else None,
+        subject_name=str(card.get("subjectName")) if card.get("subjectName") else None,
+        characteristics=characteristics,
+    )
+
+
+@router.post("/wb/generate-nm")
+async def generate_from_nm_id(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    nm_id: int = Form(...),
+    brief: str = Form(""),
+    source_image_asset_ids: str = Form(""),
+    source_image_urls: str = Form(""),
+    auto_approve: str = Form(""),
+    category_template_id: str = Form(""),
+) -> RedirectResponse:
+    """Create a job straight from a WB nmID: card data + photos via official Content API,
+    CDN fallback when no token is configured. Does not require the external WB Tool."""
+    if nm_id <= 0:
+        return RedirectResponse(url=url("/create?photo_error=" + quote("Укажите корректный nmID товара WB")), status_code=303)
+    try:
+        internet_urls = parse_source_image_urls(source_image_urls)
+    except ValueError as exc:
+        return RedirectResponse(
+            url=url(f"/create?photo_error={quote(str(exc))}"),
+            status_code=303,
+        )
+    eff = EffectiveSettings.resolve(service(request).storage)
+    try:
+        card = await WBContentClient(token=eff.wb_content_api_token).product_card(nm_id)
+    except httpx.HTTPError:
+        card = None
+    product = _product_from_wb_card(nm_id, card)
+    photo_urls = photo_urls_from_card(card) if card else []
+    if photo_urls:
+        product.images = [
+            ProductImage(url=photo_url, role="source", alt=f"WB Content API {index}")
+            for index, photo_url in enumerate(photo_urls, start=1)
+        ]
+    uploaded_ids = parse_source_image_ids(source_image_asset_ids)
+    attach_source_images(product, uploaded_ids)
+    attach_source_image_urls(product, internet_urls)
+    # nm_id > 0 keeps generation allowed even without photos (CDN fallback runs inside the job).
+    try:
+        job = await service(request).create_job(
+            CreateJobRequest(
+                product=product,
+                brief=brief,
+                style="marketplace-clean",
+                outputs=["wb_10_slides", "rich_package"],
+                source_image_asset_ids=uploaded_ids,
+                auto_approve=auto_approve in {"1", "true", "on", "yes"},
+                category_template_id=category_template_id.strip() or None,
+            ),
+            background_tasks=background_tasks,
+        )
+    except SourcePhotosRequiredError as exc:
+        return RedirectResponse(
+            url=url(f"/create?photo_error={quote(str(exc))}"),
+            status_code=303,
+        )
     return RedirectResponse(url=url(f"/jobs/{job.id}"), status_code=303)
 
 
@@ -732,6 +829,36 @@ async def create_generation_job(
         "result_url": url(f"/v1/generation/jobs/{job.id}/result"),
         "export_url": url(f"/v1/generation/jobs/{job.id}/export"),
     }
+
+
+@router.post("/v1/generation/jobs/batch")
+async def create_generation_jobs_batch(
+    request: Request,
+    payload: BatchCreateJobsRequest,
+    background_tasks: BackgroundTasks,
+) -> JSONResponse:
+    """Queue up to 20 jobs in one call (automatic mode for a list of products)."""
+    items: list[dict] = []
+    errors: list[dict] = []
+    for index, job_request in enumerate(payload.jobs):
+        try:
+            job = await service(request).create_job(job_request, background_tasks=background_tasks)
+        except SourcePhotosRequiredError as exc:
+            errors.append({"index": index, "detail": str(exc)})
+            continue
+        items.append(
+            {
+                "index": index,
+                "id": job.id,
+                "status": job.status,
+                "result_url": url(f"/v1/generation/jobs/{job.id}/result"),
+                "export_url": url(f"/v1/generation/jobs/{job.id}/export"),
+            }
+        )
+    return JSONResponse(
+        content={"items": items, "errors": errors, "created": len(items)},
+        headers=NO_CACHE_HEADERS,
+    )
 
 
 @router.post("/v1/generation/jobs/{job_id}/source-images")
@@ -875,6 +1002,39 @@ async def approve_generation_job(request: Request, job_id: str) -> dict:
     return job.model_dump(mode="json", exclude={"result"})
 
 
+def _slide_png_urls(job, base_url: str) -> list[str]:
+    """Public URLs of finalized slide PNGs (for official WB Content media upload)."""
+    if not job.result or not base_url:
+        return []
+    urls = []
+    for slide in job.result.slides:
+        if slide.png_asset_id:
+            urls.append(f"{base_url}/v1/assets/{slide.png_asset_id}")
+    return urls
+
+
+async def perform_wb_upload(request: Request, job) -> dict:
+    """Upload approved media to WB: official Content API first, external WB Tool as fallback."""
+    eff = EffectiveSettings.resolve(service(request).storage)
+    base_url = public_base_url(request)
+    if eff.wb_content_api_token and job.result and job.result.product.nm_id:
+        png_urls = _slide_png_urls(job, base_url)
+        if png_urls:
+            content_result = await WBContentClient(token=eff.wb_content_api_token).upload_media(
+                job.result.product.nm_id,
+                png_urls,
+            )
+            if content_result.get("ok"):
+                return {**content_result, "via": "wb_content"}
+    try:
+        tool_result = await WBToolClient(wb_content_token=eff.wb_content_api_token).upload_job(
+            job, public_base_url=base_url
+        )
+    except httpx.HTTPError as exc:
+        return {"ok": False, "status": 0, "detail": str(exc)[:240]}
+    return {**tool_result, "via": "wb_tool"}
+
+
 @router.post("/jobs/{job_id}/upload-to-wb")
 async def upload_job_to_wb(request: Request, job_id: str) -> RedirectResponse:
     try:
@@ -883,15 +1043,10 @@ async def upload_job_to_wb(request: Request, job_id: str) -> RedirectResponse:
         raise HTTPException(status_code=404, detail="job not found") from None
     if job.status != "approved":
         raise HTTPException(status_code=409, detail="upload to WB is allowed only after approve")
-    try:
-        result = await WBToolClient().upload_job(job, public_base_url(request))
-    except httpx.HTTPError as exc:
-        detail = quote(str(exc)[:240])
-        return RedirectResponse(
-            url=url(f"/jobs/{job_id}?upload=error&upload_detail={detail}"),
-            status_code=303,
-        )
+    result = await perform_wb_upload(request, job)
     query = upload_redirect_query(result)
+    if result.get("via") == "wb_content":
+        query += "&upload_via=wb_content"
     return RedirectResponse(url=url(f"/jobs/{job_id}?{query}"), status_code=303)
 
 

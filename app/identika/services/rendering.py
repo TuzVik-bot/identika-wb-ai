@@ -768,6 +768,13 @@ def build_rich_zip(result: GenerationResult, asset_blobs: dict[str, bytes]) -> b
     return buf.getvalue()
 
 
+def _build_seo_txt(result: GenerationResult) -> bytes:
+    lines = ["Наименование (до 60 символов):", result.seo.title, "", "Описание:", result.seo.description]
+    if result.seo.keywords:
+        lines.extend(["", "Ключевые слова:", ", ".join(result.seo.keywords)])
+    return "\n".join(lines).encode("utf-8")
+
+
 def build_export_zip(
     result: GenerationResult,
     asset_blobs: dict[str, bytes],
@@ -816,4 +823,6 @@ def build_export_zip(
             zf.writestr("rich/cover.svg", asset_blobs[result.rich.cover_asset_id])
         if result.rich.pdf_asset_id and result.rich.pdf_asset_id in asset_blobs:
             zf.writestr("rich/preview.pdf", asset_blobs[result.rich.pdf_asset_id])
+        if result.seo.title or result.seo.description or result.seo.keywords:
+            zf.writestr("seo/seo.txt", _build_seo_txt(result))
     return buf.getvalue()

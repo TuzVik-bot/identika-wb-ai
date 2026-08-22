@@ -61,6 +61,7 @@ class SlideSpec(BaseModel):
     text_blocks: list[TextBlock] = Field(default_factory=list)
     asset_id: str | None = None
     background_asset_id: str | None = None
+    png_asset_id: str | None = None
     image_cleared: bool = False
     width: int = 900
     height: int = 1200
@@ -81,6 +82,12 @@ class RichPackage(BaseModel):
     blocks: list[RichBlock] = Field(default_factory=list)
 
 
+class SeoTexts(BaseModel):
+    title: str = ""
+    description: str = ""
+    keywords: list[str] = Field(default_factory=list)
+
+
 class GenerationResult(BaseModel):
     schema_version: str = SCHEMA_VERSION
     prompt_version: str = "mock-v1"
@@ -89,6 +96,7 @@ class GenerationResult(BaseModel):
     product: ProductContext
     slides: list[SlideSpec]
     rich: RichPackage
+    seo: SeoTexts = Field(default_factory=SeoTexts)
     warnings: list[str] = Field(default_factory=list)
     info: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -105,6 +113,12 @@ class CreateJobRequest(BaseModel):
     source_image_asset_ids: list[str] = Field(default_factory=list)
     allow_generate_without_photos: bool = False
     category_template_id: str | None = None
+    provider: Literal["mock", "openrouter"] | None = None
+    auto_approve: bool = False
+
+
+class BatchCreateJobsRequest(BaseModel):
+    jobs: list[CreateJobRequest] = Field(min_length=1, max_length=20)
 
 
 class SlideTextUpdate(BaseModel):

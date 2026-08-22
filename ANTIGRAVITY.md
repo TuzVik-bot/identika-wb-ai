@@ -1,8 +1,8 @@
 # Antigravity Handoff: Identika WB AI
 
-Дата среза: 2026-06-02  
+Дата среза: 2026-08-23  
 Рабочая папка: `/Users/home/Downloads/Identika`  
-Статус: рабочий MVP в стиле кабинета, с API/UI флоу generate → approve → export/rich-export → upload.
+Статус: рабочий продукт в стиле кабинета, API/UI флоу generate → (auto-)approve → export/rich-export → upload; «генерация в 1 клик» и batch-режим реализованы.
 
 ## Назначение и scope
 
@@ -58,7 +58,8 @@ Identika WB AI - локальный FastAPI-сервис для генераци
 
 - `GET /health`.
 - `POST /v1/uploads/source-images`.
-- `POST /v1/generation/jobs`, `GET /v1/generation/jobs`, `GET /v1/generation/jobs/{job_id}`.
+- `POST /v1/generation/jobs`, `POST /v1/generation/jobs/batch` (до 20 job'ов).
+- `GET /v1/generation/jobs`, `GET /v1/generation/jobs/{job_id}`.
 - `GET /v1/generation/jobs/{job_id}/result`.
 - `PATCH /v1/generation/jobs/{job_id}/result/text`.
 - `POST /v1/generation/jobs/{job_id}/source-images`.
@@ -67,6 +68,8 @@ Identika WB AI - локальный FastAPI-сервис для генераци
 - `GET /v1/generation/jobs/{job_id}/export`.
 - `GET /v1/generation/jobs/{job_id}/rich-export`.
 - `GET /v1/assets/{asset_id}`.
+- `POST /wb/generate` (sku_id через WB Tool), `POST /wb/generate-nm` (nmID через WB Content API, WB Tool не нужен).
+- `POST /jobs/{job_id}/upload-to-wb` — сначала официальный Content API `/content/v3/media/save`, затем WB Tool → staging.
 
 ### Бизнес-флоу
 
@@ -86,13 +89,15 @@ Identika WB AI - локальный FastAPI-сервис для генераци
   - Используется общий Basic Auth WB Tool; отдельный `IDENTIKA_UI_PASSWORD` обычно не задается.
   - `scripts/deploy_vps.sh` использует `SSHPASS`; держать только в env, не коммитить.
 
-## Свежие крупные изменения (актуально для этой ветки)
+## Свежие крупные изменения (2026-08-23, «генерация в 1 клик»)
 
-- UI-редизайн кабинета (dashboard/create/job) и улучшенная навигация действий.
-- Добавлены delete-действия для job и действия редактирования/сброса контента слайдов.
-- Guard для генерации без фото и явные подсказки/валидации при загрузке source images.
-- Выделен rich-export (`/v1/generation/jobs/{job_id}/rich-export`) и rich-зона в UI.
-- Финализация качества: после approve используется `final` quality profile для экспорта.
+- `auto_approve` в `CreateJobRequest`: после успешной генерации job сам финализируется (approved + final) — ZIP сразу доступен; чекбокс на /create (включён по умолчанию), поддержка в обеих WB-формах.
+- `POST /wb/generate-nm`: карточка из официального WB Content API (токен в настройках), CDN-fallback без токена; внешний WB Tool не нужен.
+- `POST /v1/generation/jobs/batch`: до 20 job'ов одним вызовом, ошибки по каждому элементу.
+- SEO-тексты (`result.seo`: title ≤60 / description / keywords) генерируются текст-моделью, видны на странице job и в ZIP как `seo/seo.txt`.
+- Upload в WB: первичный путь — Content API `media/save` по публичным URL PNG-слайдов (новые `SlideSpec.png_asset_id`-ассеты), fallback — WB Tool → staging.
+- Per-job `provider` (mock/openrouter) — тест-хук; при пустом ключе даёт явное предупреждение.
+- Живой E2E 2026-08-22: текст + hero-изображение через OpenRouter без fallback-предупреждений, авто-approve, ZIP 9.4 MB; 138 тестов зелёные.
 
 ## Известные проблемы, TODO и ближайшие приоритеты
 

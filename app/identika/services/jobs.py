@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import logging
 import time
 from typing import TYPE_CHECKING
@@ -43,6 +44,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger("identika.jobs")
 
 
+def _resolve_eff(request: CreateJobRequest, storage: Storage) -> EffectiveSettings:
+    """Global settings with an optional per-job provider override (test hook)."""
+    eff = EffectiveSettings.resolve(storage)
+    if request.provider and request.provider != eff.provider:
+        eff = dataclasses.replace(eff, provider=request.provider)
+    return eff
+
+
 class JobService:
     def __init__(self, storage: Storage | None = None) -> None:
         self.storage = storage or Storage()
@@ -58,7 +67,7 @@ class JobService:
             allow_without_photos=request.allow_generate_without_photos,
         )
         job = self.storage.create_job(request.model_dump(mode="json"))
-        eff = EffectiveSettings.resolve(self.storage)
+        eff = _resolve_eff(request, self.storage)
         if (
             background_tasks is not None
             and eff.effective_provider == "openrouter"
@@ -77,14 +86,18 @@ class JobService:
     async def _run_job(self, job_id: str, request: CreateJobRequest) -> None:
         started = time.perf_counter()
         self.storage.set_running(job_id)
-        eff = EffectiveSettings.resolve(self.storage)
+        eff = _resolve_eff(request, self.storage)
         provider_name = eff.effective_provider
         try:
             request.product, image_warnings = await download_product_images(
                 job_id, request.product, self.storage
             )
-            provider = get_provider(self.storage)
+            provider = get_provider(eff, self.storage)
             result = await provider.generate(request, eff)
+            if request.provider == "openrouter" and eff.effective_provider != "openrouter":
+                result.warnings.append(
+                    "Per-job provider 'openrouter' проигнорирован: OPENROUTER_API_KEY пуст — использован mock."
+                )
             result.product = request.product
             result.category_template_id = request.category_template_id
             if image_warnings:
@@ -95,6 +108,13 @@ class JobService:
                 result = await generate_slide_images(job_id, request, result, self.storage, eff)
             result = self._render_assets(job_id, result)
             self.storage.save_result(job_id, result)
+            if request.auto_approve:
+                try:
+                    self.approve(job_id)
+                except ValueError as exc:
+                    result = self.storage.get_job(job_id).result or result
+                    result.warnings.append(f"Авто-approve не выполнен: {exc}")
+                    self.storage.update_result(job_id, result)
             duration_ms = int((time.perf_counter() - started) * 1000)
             logger.info(
                 "job completed",
@@ -226,11 +246,20 @@ class JobService:
             asset_id = self.storage.add_asset(job_id, f"slide_{slide.index:02d}.svg", data, "image/svg+xml")
             slide.asset_id = asset_id
             asset_blobs[asset_id] = data
-            export_blobs[asset_id] = render_slide_image(
+            export_png = render_slide_image(
                 slide,
                 source_image_href=export_source,
                 background_image_href=export_background,
                 category_template=category_template,
+            )
+            export_blobs[asset_id] = export_png
+            if slide.png_asset_id:
+                try:
+                    self.storage.delete_asset(slide.png_asset_id)
+                except KeyError:
+                    pass
+            slide.png_asset_id = self.storage.add_asset(
+                job_id, f"slide_{slide.index:02d}.png", export_png, "image/png"
             )
         if result.slides:
             export_source, export_background = self._render_slide_hrefs(

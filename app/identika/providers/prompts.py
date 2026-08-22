@@ -156,5 +156,9 @@ OPENROUTER_TEXT_SYSTEM_PROMPT = (
     "subtitle = кратко про ракурс, bullets = пустой массив []. "
     "Слайд 10 строго: title = 'Комплект поставки', subtitle про состав комплекта, bullets 2-4 коротких элемента комплекта. "
     "Поле warnings — только служебные замечания для оператора, не копируй их в title/subtitle/bullets. "
-    "Схема: {slides:[{index,title,subtitle,bullets}], rich_blocks:[{index,title,text}], warnings:[string]}."
+    "Поле seo — тексты для карточки WB: title до 60 символов с главным ключевым словом, "
+    "description 300–1000 символов с ключевыми словами органично (без спама), "
+    "keywords 5–15 поисковых фраз. "
+    "Схема: {slides:[{index,title,subtitle,bullets}], rich_blocks:[{index,title,text}], "
+    "seo:{title,description,keywords:[string]}, warnings:[string]}."
 )

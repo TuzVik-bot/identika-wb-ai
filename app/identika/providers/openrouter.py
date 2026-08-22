@@ -32,9 +32,16 @@ class _RichText(BaseModel):
     text: str = ""
 
 
+class _SeoText(BaseModel):
+    title: str = ""
+    description: str = ""
+    keywords: list[str] = Field(default_factory=list)
+
+
 class _TextPlan(BaseModel):
     slides: list[_SlideText]
     rich_blocks: list[_RichText] = Field(default_factory=list)
+    seo: _SeoText | None = None
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -161,6 +168,10 @@ class OpenRouterProvider(AiProvider):
             if incoming:
                 block.title = incoming.title.strip()
                 block.text = incoming.text.strip()
+        if plan.seo:
+            result.seo.title = plan.seo.title.strip()[:60]
+            result.seo.description = plan.seo.description.strip()
+            result.seo.keywords = [kw.strip() for kw in plan.seo.keywords if kw.strip()][:20]
         # LLM product disclaimers stay out of service warnings (shown only in info if needed).
         if plan.warnings:
             for item in plan.warnings:
@@ -208,8 +219,8 @@ class OpenRouterProvider(AiProvider):
         return normalized[:4]
 
 
-def get_provider(storage=None) -> AiProvider:
-    eff = EffectiveSettings.resolve(storage)
+def get_provider(eff: EffectiveSettings | None = None, storage=None) -> AiProvider:
+    eff = eff or EffectiveSettings.resolve(storage)
     if eff.effective_provider == "openrouter":
         return OpenRouterProvider()
     return MockProvider()

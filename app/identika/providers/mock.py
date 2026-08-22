@@ -6,6 +6,7 @@ from identika.models import (
     GenerationResult,
     RichBlock,
     RichPackage,
+    SeoTexts,
     SlideSpec,
     TextBlock,
 )
@@ -70,12 +71,22 @@ class MockProvider(AiProvider):
             RichBlock(index=i, title=f"Блок {i}: {slides[i-1].title}", text=slides[i-1].subtitle)
             for i in range(1, 11)
         ]
+        seo_keywords = [title[:40]]
+        seo_keywords.extend(str(key) for key in product.characteristics.keys() if str(key).strip())
         result = GenerationResult(
             provider=self.name,
             model="mock-layout-v1",
             product=product,
             slides=slides,
             rich=RichPackage(blocks=rich_blocks),
+            seo=SeoTexts(
+                title=title[:60],
+                description=(
+                    f"{title} — карточка собрана в mock-режиме. "
+                    f"Категория: {subject}. Проверьте и дополните SEO-описание перед публикацией."
+                ),
+                keywords=seo_keywords[:10],
+            ),
             warnings=["Mock-режим: реальные AI-изображения не запрашивались."],
             info=[],
         )

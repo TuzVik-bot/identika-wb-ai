@@ -71,7 +71,13 @@
     {% endif %}
   </section>
   {% elif upload_status == 'ok' %}
-  <section class="surface-card notice notice--success">Пакет успешно отправлен в WB Tool.</section>
+  <section class="surface-card notice notice--success">
+    {% if upload_via == 'wb_content' %}
+    Слайды загружены в карточку WB через официальный Content API (media/save).
+    {% else %}
+    Пакет успешно отправлен в WB Tool.
+    {% endif %}
+  </section>
   {% elif upload_status == 'staging' %}
   <section class="surface-card notice notice--warning">
     <p><strong>Пакет готов к передаче в WB Tool.</strong> Автозагрузка на маркетплейс ещё не включена на стороне WB Tool, поэтому сейчас используйте готовые архивы вручную.</p>
@@ -411,6 +417,22 @@
               </div>
               {% endif %}
 
+              {% if job.result.seo and (job.result.seo.title or job.result.seo.description or job.result.seo.keywords) %}
+              <div class="side-card-mini seo-card" id="seo-card">
+                <h4>SEO-тексты карточки</h4>
+                <p class="text-muted"><strong>Наименование ({{ job.result.seo.title|length }}/60):</strong> {{ job.result.seo.title }}</p>
+                {% if job.result.seo.description %}
+                <p><strong>Описание:</strong></p>
+                <textarea readonly rows="5" class="seo-description" onclick="this.select()">{{ job.result.seo.description }}</textarea>
+                {% endif %}
+                {% if job.result.seo.keywords %}
+                <p><strong>Ключевые слова:</strong></p>
+                <textarea readonly rows="2" class="seo-keywords" onclick="this.select()">{{ job.result.seo.keywords|join(', ') }}</textarea>
+                {% endif %}
+                <p class="text-muted">Тексты также включены в Export ZIP (<code>seo/seo.txt</code>).</p>
+              </div>
+              {% endif %}
+
               <div class="side-card-mini">
                 <h4>Содержимое пакета</h4>
                 <ul class="package-files-list">
@@ -418,6 +440,7 @@
                   <li><code>slides/slide_01.png</code> ... <code>slide_10.png</code></li>
                   <li><code>rich/block_01.png</code> ... <code>block_{{ '%02d'|format(job.result.rich.blocks|length) }}.png</code></li>
                   <li><code>rich/preview.pdf</code></li>
+                  <li><code>seo/seo.txt</code></li>
                   <li><code>rich_export.zip</code></li>
                 </ul>
               </div>

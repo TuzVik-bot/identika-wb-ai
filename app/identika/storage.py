@@ -255,6 +255,24 @@ class Storage:
             raise ValueError("asset path escaped assets directory")
         return path, row["media_type"]
 
+    def delete_asset(self, asset_id: str) -> None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT path FROM assets WHERE id=?", (asset_id,)).fetchone()
+            if row is None:
+                raise KeyError(asset_id)
+            conn.execute("DELETE FROM assets WHERE id=?", (asset_id,))
+        path = Path(row["path"])
+        try:
+            resolved = path.resolve()
+        except OSError:
+            return
+        if self.assets_dir.resolve() not in resolved.parents:
+            return
+        try:
+            resolved.unlink(missing_ok=True)
+        except OSError:
+            pass
+
     def _row_to_job(self, row: sqlite3.Row) -> JobRecord:
         result = None
         if row["result_json"]:

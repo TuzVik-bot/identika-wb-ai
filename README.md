@@ -94,10 +94,11 @@ RUN_OPENROUTER_E2E=1 RUN_OPENROUTER_IMAGE_E2E=1 pytest -q tests/test_openrouter_
 - `GET /settings`, `POST /settings`, `POST /settings/test` — провайдер и OpenRouter.
 - `GET /templates`, `POST /templates`, `POST /templates/{template_id}/delete` — шаблоны категорий.
 - `POST /v1/uploads/source-images` — загрузка исходных фото.
-- `POST /v1/generation/jobs`
+- `POST /v1/generation/jobs` — создание job (`auto_approve: true` = сразу approve + final ZIP; `provider` — per-job override mock/openrouter).
+- `POST /v1/generation/jobs/batch` — до 20 job'ов за один вызов (автоматический режим).
 - `GET /v1/generation/jobs`
 - `GET /v1/generation/jobs/{job_id}`
-- `GET /v1/generation/jobs/{job_id}/result`
+- `GET /v1/generation/jobs/{job_id}/result` — включая `seo` (title/description/keywords).
 - `PATCH /v1/generation/jobs/{job_id}/result/text`
 - `POST /v1/generation/jobs/{job_id}/re-render`
 - `POST /v1/generation/jobs/{job_id}/source-images`
@@ -107,6 +108,9 @@ RUN_OPENROUTER_E2E=1 RUN_OPENROUTER_IMAGE_E2E=1 pytest -q tests/test_openrouter_
 - `DELETE /v1/generation/jobs/{job_id}/slides/{slide_index}/image`
 - `GET /v1/generation/jobs/{job_id}/export`
 - `GET /v1/generation/jobs/{job_id}/rich-export`
+- `POST /jobs/{job_id}/upload-to-wb` — сначала официальный WB Content API (`/content/v3/media/save`), затем WB Tool → staging.
+- `POST /wb/generate` — генерация по sku_id через WB Tool.
+- `POST /wb/generate-nm` — генерация по nmID через WB Content API (WB Tool не нужен).
 - `GET /v1/assets/{asset_id}`
 
 ## Безопасность

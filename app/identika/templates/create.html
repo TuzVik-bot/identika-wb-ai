@@ -68,6 +68,32 @@
           <input type="checkbox" id="allow-generate-without-photos" name="allow_generate_without_photos" value="1">
           <span>Сгенерировать без фото (только текст, без картинок товара)</span>
         </label>
+        <label class="field field--checkbox auto-approve-field">
+          <input type="checkbox" id="auto-approve" name="auto_approve" value="1" checked>
+          <span>Авто-approve после генерации (пакет сразу готов к скачиванию — один клик)</span>
+        </label>
+      </form>
+    </section>
+
+    <section class="step-card nm-card">
+      <div class="step-card__head">
+        <div>
+          <p class="eyebrow">По артикулу</p>
+          <h2>Генерация по nmID</h2>
+        </div>
+        <span>03</span>
+      </div>
+      <form method="post" action="{{ base_path }}/wb/generate-nm" class="nm-generate-form" data-submit-loading>
+        <label class="field">Артикул WB (nmID)
+          <input type="number" name="nm_id" min="1" required placeholder="Например: 16830024" inputmode="numeric">
+        </label>
+        <input type="hidden" name="brief" value="{{ brief }}">
+        <input type="hidden" name="category_template_id" value="{{ category_template_id }}">
+        <input type="hidden" name="source_image_asset_ids" class="source-image-ids-field" value="">
+        <input type="hidden" name="source_image_urls" class="source-image-urls-field" value="">
+        <input type="hidden" name="auto_approve" class="auto-approve-field-input" value="1">
+        <button type="submit" class="button button--accent">Сгенерировать по nmID</button>
+        <p class="text-muted">Данные и фото карточки — из официального WB Content API (нужен токен в настройках); без токена используется публичный CDN WB. WB Tool не требуется.</p>
       </form>
     </section>
 
@@ -141,7 +167,7 @@
         <h2 id="results-title">{% if is_all_accounts %}Товары WB{% else %}Результаты{% endif %}</h2>
         <p class="text-muted" id="product-count-label">{{ products_count }} товаров в текущей выдаче</p>
       </div>
-      <span>03</span>
+      <span>04</span>
     </div>
 
     {% if products %}
@@ -176,6 +202,7 @@
           <input type="hidden" name="source_image_asset_ids" class="source-image-ids-field" value="">
           <input type="hidden" name="source_image_urls" class="source-image-urls-field" value="">
           <input type="hidden" name="allow_generate_without_photos" class="allow-without-photos-field" value="">
+          <input type="hidden" name="auto_approve" class="auto-approve-field-input" value="1">
           <button type="submit" class="button button--accent wb-generate-btn" data-can-generate="{{ '1' if product.generation_ready else '0' }}" title="Сначала попробуем фото из WB, затем интернет-ссылку или загруженные вручную фото" {% if not product.generation_ready %}disabled{% endif %}>Сгенерировать карточку</button>
           <p class="text-muted wb-generate-hint">WB-фото → ручное фото → черновик без фото, если отмечено слева.</p>
         </form>
@@ -212,6 +239,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const sourceUrlFields = document.querySelectorAll('.source-image-urls-field');
   const allowCheckbox = document.getElementById('allow-generate-without-photos');
   const allowFields = document.querySelectorAll('.allow-without-photos-field');
+  const autoApproveCheckbox = document.getElementById('auto-approve');
+  const autoApproveFields = document.querySelectorAll('.auto-approve-field-input');
   const templateSelect = document.getElementById('category-template-select');
   const templateFields = document.querySelectorAll('.category-template-id-field');
   const generateButtons = document.querySelectorAll('.wb-generate-btn');
@@ -238,12 +267,16 @@ document.addEventListener('DOMContentLoaded', () => {
     allowFields.forEach((field) => {
       field.value = allowWithout ? '1' : '';
     });
+    autoApproveFields.forEach((field) => {
+      field.value = autoApproveCheckbox?.checked ? '1' : '';
+    });
     sourceUrlFields.forEach((field) => {
       field.value = sourceUrlsInput?.value || '';
     });
   }
 
   allowCheckbox?.addEventListener('change', syncGenerateButtons);
+  autoApproveCheckbox?.addEventListener('change', syncGenerateButtons);
   sourceUrlsInput?.addEventListener('input', syncGenerateButtons);
   syncGenerateButtons();
 

@@ -12,9 +12,13 @@ from identika.config import settings
 logger = logging.getLogger("identika.wb_content")
 
 CARDS_LIST_PATH = "/content/v2/get/cards/list"
+MEDIA_SAVE_PATH = "/content/v3/media/save"
 
 # Photo size keys ordered from best to acceptable quality.
 _PHOTO_SIZE_KEYS = ("big", "hq", "c516x688")
+
+# WB media/save accepts at most 30 photos per card.
+MAX_MEDIA_PHOTOS = 30
 
 
 def _photo_url(entry: Any) -> str:
@@ -46,15 +50,37 @@ def _pick_card(cards: list[Any], nm_id: int) -> dict[str, Any] | None:
     return fallback
 
 
+def _error_detail(response: httpx.Response) -> str:
+    try:
+        body = response.json()
+        if isinstance(body, dict):
+            detail = body.get("detail") or body.get("message") or body
+            return str(detail)[:300]
+    except (ValueError, TypeError):
+        pass
+    return (response.text or response.reason_phrase or "unknown error")[:300]
+
+
+def photo_urls_from_card(card: dict[str, Any]) -> list[str]:
+    """Extract deduped photo URLs from a WB Content API card, best quality first."""
+    urls: list[str] = []
+    seen: set[str] = set()
+    for entry in card.get("photos") or []:
+        url = _photo_url(entry)
+        if url and url not in seen:
+            seen.add(url)
+            urls.append(url)
+    return urls
+
+
 class WBContentClient:
     def __init__(self, base_url: str | None = None, token: str | None = None) -> None:
         self.base_url = (base_url or settings.wb_content_base_url).rstrip("/")
         self.token = (token if token is not None else settings.wb_content_api_token).strip()
 
-    async def product_photo_urls(self, nm_id: int) -> list[str]:
-        """Return WB Content API photo URLs for nm_id; never raises."""
+    async def _fetch_card(self, nm_id: int) -> dict[str, Any] | None:
         if not self.token or nm_id <= 0:
-            return []
+            return None
         payload = {
             "settings": {
                 "cursor": {"limit": 1},
@@ -78,16 +104,28 @@ class WBContentClient:
                 "wb content api request failed",
                 extra={"nm_id": nm_id, "error": type(exc).__name__},
             )
-            return []
-
+            return None
         cards = data.get("cards") if isinstance(data, dict) else None
         if not isinstance(cards, list):
             logger.debug("wb content api returned no cards", extra={"nm_id": nm_id})
-            return []
-        card = _pick_card(cards, nm_id)
+            return None
+        return _pick_card(cards, nm_id)
+
+    async def product_card(self, nm_id: int) -> dict[str, Any] | None:
+        """Return the raw WB Content API card for nm_id (title, photos, characteristics); None if unavailable."""
+        card = await self._fetch_card(nm_id)
+        if card is None:
+            return None
+        # A fallback card without an exact nmID match may belong to another product.
+        if card.get("nmID") != nm_id:
+            return None
+        return card
+
+    async def product_photo_urls(self, nm_id: int) -> list[str]:
+        """Return WB Content API photo URLs for nm_id; never raises."""
+        card = await self._fetch_card(nm_id)
         if card is None:
             return []
-
         urls: list[str] = []
         seen: set[str] = set()
         for entry in card.get("photos") or []:
@@ -96,3 +134,54 @@ class WBContentClient:
                 seen.add(url)
                 urls.append(url)
         return urls
+
+    async def upload_media(self, nm_id: int, photo_urls: list[str]) -> dict[str, Any]:
+        """Attach photos to a WB card by public URL via official Content API.
+
+        Returns {"ok": True, "upload_id": ...} on success or {"ok": False, ...} on failure.
+        """
+        clean_urls = [url.strip() for url in photo_urls if url.strip()][:MAX_MEDIA_PHOTOS]
+        if not self.token:
+            return {"ok": False, "reason": "no_token"}
+        if nm_id <= 0:
+            return {"ok": False, "reason": "no_nm_id"}
+        if not clean_urls:
+            return {"ok": False, "reason": "no_photos"}
+        payload = {
+            "nmID": nm_id,
+            "data": [{"photo": index, "url": url} for index, url in enumerate(clean_urls, start=1)],
+        }
+        try:
+            async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
+                response = await client.post(
+                    f"{self.base_url}{MEDIA_SAVE_PATH}",
+                    headers={
+                        "Authorization": self.token,
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                )
+        except httpx.HTTPError as exc:
+            logger.warning(
+                "wb content media save failed",
+                extra={"nm_id": nm_id, "error": type(exc).__name__},
+            )
+            return {"ok": False, "reason": "network", "detail": type(exc).__name__}
+        if response.status_code >= 400:
+            detail = _error_detail(response)
+            logger.warning(
+                "wb content media save rejected",
+                extra={"nm_id": nm_id, "status": response.status_code},
+            )
+            return {
+                "ok": False,
+                "reason": "http",
+                "status": response.status_code,
+                "detail": detail,
+            }
+        try:
+            data = response.json()
+        except ValueError:
+            data = {}
+        upload_id = data.get("id") if isinstance(data, dict) else None
+        return {"ok": True, "upload_id": upload_id}
