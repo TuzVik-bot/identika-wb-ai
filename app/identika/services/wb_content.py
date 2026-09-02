@@ -81,35 +81,56 @@ class WBContentClient:
     async def _fetch_card(self, nm_id: int) -> dict[str, Any] | None:
         if not self.token or nm_id <= 0:
             return None
-        payload = {
-            "settings": {
-                "cursor": {"limit": 1},
-                "filter": {"textSearch": str(nm_id), "withPhoto": -1},
-            }
-        }
+        # The API ignores textSearch/nmIDs filters on /content/v2/get/cards/list, so
+        # scan pages (keyset cursor) and match nmID client-side.
         try:
             async with httpx.AsyncClient(timeout=20.0, trust_env=False) as client:
-                response = await client.post(
-                    f"{self.base_url}{CARDS_LIST_PATH}",
-                    headers={
-                        "Authorization": self.token,
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                )
-            response.raise_for_status()
-            data = response.json()
+                cursor: dict[str, Any] = {"limit": 100}
+                fallback: dict[str, Any] | None = None
+                for _ in range(5):
+                    payload = {
+                        "settings": {"cursor": cursor, "filter": {"withPhoto": -1}},
+                    }
+                    response = await client.post(
+                        f"{self.base_url}{CARDS_LIST_PATH}",
+                        headers={
+                            "Authorization": self.token,
+                            "Content-Type": "application/json",
+                        },
+                        json=payload,
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    cards = data.get("cards") if isinstance(data, dict) else None
+                    if isinstance(cards, list):
+                        for card in cards:
+                            if not isinstance(card, dict):
+                                continue
+                            card_nm_id = card.get("nmID")
+                            if card_nm_id == nm_id:
+                                return card
+                            if card_nm_id is None and fallback is None:
+                                fallback = card
+                    if not isinstance(cards, list) or not cards:
+                        break
+                    next_cursor = data.get("cursor") if isinstance(data, dict) else None
+                    if not isinstance(next_cursor, dict):
+                        break
+                    next_updated = next_cursor.get("updatedAt")
+                    next_nm_id = next_cursor.get("nmID")
+                    if not next_updated or not next_nm_id:
+                        break
+                    cursor = {"limit": 100, "updatedAt": next_updated, "nmID": next_nm_id}
         except (httpx.HTTPError, ValueError) as exc:
             logger.warning(
                 "wb content api request failed",
                 extra={"nm_id": nm_id, "error": type(exc).__name__},
             )
             return None
-        cards = data.get("cards") if isinstance(data, dict) else None
-        if not isinstance(cards, list):
-            logger.debug("wb content api returned no cards", extra={"nm_id": nm_id})
-            return None
-        return _pick_card(cards, nm_id)
+        if fallback is not None:
+            return fallback
+        logger.debug("wb content api returned no cards", extra={"nm_id": nm_id})
+        return None
 
     async def product_card(self, nm_id: int) -> dict[str, Any] | None:
         """Return the raw WB Content API card for nm_id (title, photos, characteristics); None if unavailable."""

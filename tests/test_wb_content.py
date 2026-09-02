@@ -12,9 +12,15 @@ from identika.services.wb_content import WBContentClient
 class FakeClient:
     """Minimal httpx.AsyncClient stand-in for WB Content API calls."""
 
-    def __init__(self, response: httpx.Response | None = None, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        response: httpx.Response | None = None,
+        error: Exception | None = None,
+        responses: list[httpx.Response] | None = None,
+    ) -> None:
         self.response = response
         self.error = error
+        self.responses = list(responses) if responses is not None else None
         self.calls: list[dict[str, Any]] = []
 
     async def __aenter__(self) -> FakeClient:
@@ -27,6 +33,9 @@ class FakeClient:
         self.calls.append({"url": url, "headers": headers or {}, "json": json})
         if self.error is not None:
             raise self.error
+        if self.responses is not None:
+            assert self.responses, "FakeClient ran out of queued responses"
+            return self.responses.pop(0)
         assert self.response is not None
         return self.response
 
@@ -80,8 +89,39 @@ def test_product_photo_urls_prefers_big_size(patch_client) -> None:
     call = fake.calls[0]
     assert call["url"].endswith("/content/v2/get/cards/list")
     assert call["headers"]["Authorization"] == "token-123"
-    assert call["json"]["settings"]["filter"]["textSearch"] == "4242"
-    assert call["json"]["settings"]["cursor"]["limit"] == 1
+    assert call["json"]["settings"]["filter"] == {"withPhoto": -1}
+    assert call["json"]["settings"]["cursor"]["limit"] == 100
+
+
+def test_product_card_found_on_second_page(patch_client) -> None:
+    fake = patch_client(
+        FakeClient(
+            responses=[
+                _json_response(
+                    {
+                        "cards": [{"nmID": 111, "photos": [{"big": "https://cdn/wrong.jpg"}]}],
+                        "cursor": {
+                            "updatedAt": "2026-08-01T00:00:00Z",
+                            "nmID": 111,
+                            "total": 120,
+                        },
+                    }
+                ),
+                _json_response(
+                    {"cards": [{"nmID": 4242, "photos": [{"big": "https://cdn/right.jpg"}]}]}
+                ),
+            ]
+        )
+    )
+    card = asyncio.run(_client().product_card(4242))
+    assert card is not None and card["nmID"] == 4242
+    assert len(fake.calls) == 2
+    chained = fake.calls[1]["json"]["settings"]["cursor"]
+    assert chained == {
+        "limit": 100,
+        "updatedAt": "2026-08-01T00:00:00Z",
+        "nmID": 111,
+    }
 
 
 def test_product_photo_urls_accepts_plain_strings_and_dedupes(patch_client) -> None:
